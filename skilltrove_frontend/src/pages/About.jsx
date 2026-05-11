@@ -7,37 +7,43 @@ const TEAM = [
     name: 'Allampalli Vinaya Sarayu',
     role: 'Team Lead | NLP & Backend',
     roll: '23P31A1201',
-    img: require('../assets/23P31A1201.jpeg')
+    img: require('../assets/23P31A1201.jpeg'),
+    social: { github: '#', linkedin: '#' }
   },
   {
     name: 'Gunti Prasanth Kumar',
     role: 'Frontend Developer',
     roll: '23P31A1285',
-    img: require('../assets/23P31A1285.jpeg')
+    img: require('../assets/23P31A1285.jpeg'),
+    social: { github: '#', linkedin: '#' }
   },
   {
     name: 'Vasamsetti Sriram',
     role: 'Backend Developer',
     roll: '23P31A1232',
-    img: require('../assets/23P31A1232.jpg')
+    img: require('../assets/23P31A1232.jpg'),
+    social: { github: '#', linkedin: '#' }
   },
   {
     name: 'Pragada Vamsi',
     role: 'Backend Developer',
     roll: '23P31A12B7',
-    img: require('../assets/23P31A12B7.jpeg')
+    img: require('../assets/23P31A12B7.jpeg'),
+    social: { github: '#', linkedin: '#' }
   },
   {
     name: 'Basa Vedhika Eshani',
     role: 'Frontend Developer',
     roll: '23P31A1202',
-    img: require('../assets/23P31A1202.jpeg')
+    img: require('../assets/23P31A1202.jpeg'),
+    social: { github: '#', linkedin: '#' }
   },
   {
     name: 'Srikakulapu Gopala Venkata Gupta',
     role: 'Database Engineer',
     roll: '23P31A12C5',
-    img: require('../assets/23P31A12C5.jpeg')
+    img: require('../assets/23P31A12C5.jpeg'),
+    social: { github: '#', linkedin: '#' }
   },
 ];
 
@@ -78,12 +84,16 @@ export default function About() {
                 <p className="text-xs uppercase tracking-widest text-orange-400 mt-1">{member.role}</p>
                 
                 <div className="mt-4 flex gap-3 opacity-70 transition-opacity group-hover:opacity-100">
-                  <a href={member.social.github} className="rounded-full bg-white/5 p-2 text-zinc-400 hover:bg-white/20 hover:text-white transition-colors">
-                    <Github size={18} />
-                  </a>
-                  <a href={member.social.linkedin} className="rounded-full bg-white/5 p-2 text-zinc-400 hover:bg-white/20 hover:text-cyan-400 transition-colors">
-                    <Linkedin size={18} />
-                  </a>
+                  {member.social?.github && (
+                    <a href={member.social.github} className="rounded-full bg-white/5 p-2 text-zinc-400 hover:bg-white/20 hover:text-white transition-colors">
+                      <Github size={18} />
+                    </a>
+                  )}
+                  {member.social?.linkedin && (
+                    <a href={member.social.linkedin} className="rounded-full bg-white/5 p-2 text-zinc-400 hover:bg-white/20 hover:text-cyan-400 transition-colors">
+                      <Linkedin size={18} />
+                    </a>
+                  )}
                 </div>
               </div>
             </motion.div>
