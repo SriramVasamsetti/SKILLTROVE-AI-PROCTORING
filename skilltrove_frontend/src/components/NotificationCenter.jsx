@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Check, Clock, Info, ShieldAlert, X } from 'lucide-react';
+import { Bell, Check, Clock, Info, ShieldAlert, X, CheckCheck } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,7 +15,6 @@ import { useAuth } from '../context/AuthContext';
 export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) {
   const { token, user } = useAuth();
   const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(false);
   const isFirstLoad = useRef(true);
   const lastKnownId = useRef(null);
 
@@ -27,7 +26,7 @@ export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) 
 
     async function fetchNotifications() {
       try {
-        const res = await fetch('http://localhost:5050/api/notifications/mine', {
+        const res = await fetch('http://localhost:5050/api/notifications', {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!res.ok) return;
@@ -75,11 +74,30 @@ export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) 
     }
   };
 
+  /**
+   * @function handleMarkAllRead
+   * @description Marks all notifications for the user as read.
+   */
+  const handleMarkAllRead = async () => {
+    try {
+      const res = await fetch('http://localhost:5050/api/notifications/read-all', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, readAt: new Date() })));
+        setUnreadCount(0);
+        toast.success('All notifications marked as read');
+      }
+    } catch (err) {
+      toast.error('Failed to clear notifications');
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Overlay to catch clicks outside */}
           <div className="fixed inset-0 z-[9998]" onClick={onClose} />
           
           <motion.div
@@ -132,8 +150,11 @@ export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) 
             </div>
 
             <div className="bg-white/5 p-3 text-center">
-              <button className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-orange-500 transition-colors">
-                Clear All Notifications
+              <button 
+                onClick={handleMarkAllRead}
+                className="flex items-center justify-center gap-2 w-full text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-orange-500 transition-colors"
+              >
+                <CheckCheck size={14} /> Mark all as read
               </button>
             </div>
           </motion.div>

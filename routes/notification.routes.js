@@ -7,5 +7,6 @@ router.use(authMiddleware(true));
 
 router.get('/', ctrl.mine);
 router.patch('/:id/read', ctrl.markRead);
+router.patch('/read-all', ctrl.markAllRead);
 
 module.exports = router;

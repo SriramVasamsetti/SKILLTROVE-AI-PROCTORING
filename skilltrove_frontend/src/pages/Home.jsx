@@ -214,8 +214,12 @@ export default function Home({ normalized }) {
                     <span className="rounded-lg bg-orange-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-orange-400 border border-orange-500/20">Assignment</span>
                     {isExpired ? <Lock className="text-red-500" size={16} /> : <Unlock className="text-emerald-500" size={16} />}
                   </div>
-                  <h3 className="text-xl font-black text-white mb-2">{quiz.title || quiz.subject}</h3>
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-6">Prof. {quiz.assignedBy?.name || 'Faculty'}</p>
+                  <h3 className="text-xl font-black text-white mb-2 line-clamp-1">{quiz.title || quiz.subject}</h3>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Prof. {quiz.assignedBy?.name || 'Faculty'}</span>
+                    <span className="h-1 w-1 rounded-full bg-zinc-800" />
+                    <span className="text-[9px] font-bold text-orange-400 uppercase tracking-widest">{quiz.bloomLevel || 'Mixed'} Level</span>
+                  </div>
                   <div className="space-y-3 mb-8">
                     <div className="flex items-center gap-3 text-zinc-400">
                       <Calendar size={14} />

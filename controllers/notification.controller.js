@@ -14,7 +14,16 @@ async function markRead(req, res) {
   res.json({ ok: true });
 }
 
+async function markAllRead(req, res) {
+  await Notification.updateMany(
+    { userId: req.user.userId, readAt: { $exists: false } },
+    { $set: { readAt: new Date() } }
+  );
+  res.json({ ok: true });
+}
+
 module.exports = {
   mine: asyncHandler(mine),
   markRead: asyncHandler(markRead),
+  markAllRead: asyncHandler(markAllRead),
 };
