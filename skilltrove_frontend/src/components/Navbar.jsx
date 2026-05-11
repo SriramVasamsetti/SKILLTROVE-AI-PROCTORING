@@ -1,7 +1,10 @@
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Bell, Search, User, LogOut, ShieldCheck } from 'lucide-react';
+import { Bell, Search, User, LogOut, ShieldCheck, BadgeCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import NotificationCenter from './NotificationCenter';
+
 
 /**
  * @function LogoBadge
@@ -28,8 +31,9 @@ function LogoBadge({ normalized }) {
  * @function StudentNavbar
  * @description Navigation component for Student users with role-based links and glassmorphism UI.
  */
-export default function Navbar({ normalized, unreadCount }) {
+export default function Navbar({ normalized, unreadCount, setUnreadCount }) {
   const { isAuthenticated, user, logout } = useAuth();
+  const [notifOpen, setNotifOpen] = useState(false);
   const navClass = ({ isActive }) =>
     `relative text-sm font-bold tracking-tight transition-colors ${
       isActive ? 'text-orange-500' : 'text-zinc-400 hover:text-white'
@@ -63,13 +67,24 @@ export default function Navbar({ normalized, unreadCount }) {
         <div className="flex items-center gap-6">
           {isAuthenticated ? (
             <>
-              <div className="relative cursor-pointer text-zinc-400 hover:text-white transition-colors">
-                <Bell size={20} />
-                {unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-black text-white shadow-lg">
-                    {unreadCount}
-                  </span>
-                )}
+              <div className="relative">
+                <div 
+                  onClick={() => setNotifOpen(!notifOpen)}
+                  className={`relative cursor-pointer transition-colors ${notifOpen ? 'text-orange-500' : 'text-zinc-400 hover:text-white'}`}
+                >
+                  <Bell size={20} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-black text-white shadow-lg">
+                      {unreadCount}
+                    </span>
+                  )}
+                </div>
+                
+                <NotificationCenter 
+                  isOpen={notifOpen} 
+                  onClose={() => setNotifOpen(false)}
+                  setUnreadCount={setUnreadCount}
+                />
               </div>
               <div className="h-8 w-[1px] bg-white/5" />
               <div className="flex items-center gap-3">

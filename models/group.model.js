@@ -5,6 +5,7 @@ const groupSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true, maxlength: 200 },
     description: { type: String, default: '', maxlength: 2000 },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true },
 );

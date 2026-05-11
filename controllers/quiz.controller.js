@@ -6,6 +6,8 @@ const { generateMixedQuestions } = require('../utils/ai');
 const { scoreAttempt } = require('../utils/evaluator');
 const { bumpHeatmap, pushScoreEntry } = require('../utils/analyticsAggregator');
 const ProctorLog = require('../models/proctoring.model');
+const Notification = require('../models/notification.model');
+const User = require('../models/user.model');
 
 function shouldUseMockQuizGeneration() {
   const key = (process.env.OPENAI_API_KEY ?? '').trim();
@@ -195,6 +197,24 @@ async function generateAiQuiz(req, res) {
   }
 
   res.status(201).json(quiz);
+
+  // If assigned by faculty, create a notification for students
+  if (quiz.assignedBy) {
+    try {
+      const students = await User.find({ role: 'student' }).select('_id').limit(100).lean();
+      const notifications = students.map(s => ({
+        userId: s._id,
+        channel: 'quiz',
+        title: 'New Assignment Assigned',
+        detail: `Prof. ${req.user.name || 'Faculty'} assigned: ${quiz.title || quiz.subject}`,
+        refModel: 'Quiz',
+        refId: quiz._id
+      }));
+      await Notification.insertMany(notifications);
+    } catch (err) {
+      console.error('[quiz/notify] Error:', err.message);
+    }
+  }
 }
 
 async function createManualQuiz(req, res) {

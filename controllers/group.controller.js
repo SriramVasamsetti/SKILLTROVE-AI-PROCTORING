@@ -1,4 +1,5 @@
 const Group = require('../models/group.model');
+const Notification = require('../models/notification.model');
 const { asyncHandler } = require('../middleware/asyncHandler');
 
 async function listGroups(req, res) {
@@ -37,9 +38,46 @@ async function deleteGroup(req, res) {
   res.status(204).send();
 }
 
+/**
+ * @function joinGroup
+ * @description Adds the authenticated user to the group members list.
+ */
+async function joinGroup(req, res) {
+  const { id } = req.params;
+  const group = await Group.findById(id);
+  if (!group) return res.status(404).json({ message: 'Group not found' });
+
+  const userId = req.user.userId;
+  if (group.members.includes(userId)) {
+    return res.status(400).json({ message: 'Already a member' });
+  }
+
+  group.members.push(userId);
+  await group.save();
+
+  res.json({ message: 'Successfully joined group', group });
+
+  // Notify group creator
+  if (group.createdBy && String(group.createdBy) !== String(userId)) {
+    try {
+      await Notification.create({
+        userId: group.createdBy,
+        channel: 'discussion',
+        title: 'New Group Member',
+        detail: `Someone just joined your group: ${group.name}`,
+        refModel: 'Group',
+        refId: group._id
+      });
+    } catch (err) {
+      console.error('[group/notify] Error:', err.message);
+    }
+  }
+}
+
 module.exports = {
   listGroups: asyncHandler(listGroups),
   createGroup: asyncHandler(createGroup),
   updateGroup: asyncHandler(updateGroup),
   deleteGroup: asyncHandler(deleteGroup),
+  joinGroup: asyncHandler(joinGroup),
 };

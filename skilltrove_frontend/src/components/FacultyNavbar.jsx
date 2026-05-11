@@ -1,15 +1,19 @@
 import { motion } from 'framer-motion';
 import { NavLink } from 'react-router-dom';
-import { Bell, LogOut, LayoutDashboard, PlusCircle, Users, Settings } from 'lucide-react';
+import { Bell, LogOut, LayoutDashboard, PlusCircle, Users, Settings, X, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import NotificationCenter from './NotificationCenter';
+import { useState } from 'react';
+
 
 /**
  * @function FacultyNavbar
  * @description specialized navigation for Faculty/Staff users.
  * Features a distinct Slate/Cyan theme to differentiate from the Student environment.
  */
-export default function FacultyNavbar({ unreadCount }) {
+export default function FacultyNavbar({ unreadCount, setUnreadCount }) {
   const { user, logout } = useAuth();
+  const [notifOpen, setNotifOpen] = useState(false);
   const navClass = ({ isActive }) =>
     `relative text-xs font-black uppercase tracking-widest transition-all ${
       isActive ? 'text-cyan-400' : 'text-zinc-500 hover:text-white'
@@ -42,13 +46,24 @@ export default function FacultyNavbar({ unreadCount }) {
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="relative cursor-pointer text-zinc-500 hover:text-cyan-400 transition-colors">
-            <Bell size={18} />
-            {unreadCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-cyan-500 text-[8px] font-black text-slate-950">
-                {unreadCount}
-              </span>
-            )}
+          <div className="relative">
+            <div 
+              onClick={() => setNotifOpen(!notifOpen)}
+              className={`relative cursor-pointer transition-colors ${notifOpen ? 'text-cyan-400' : 'text-zinc-500 hover:text-cyan-400'}`}
+            >
+              <Bell size={18} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-cyan-500 text-[8px] font-black text-slate-950">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+            
+            <NotificationCenter 
+              isOpen={notifOpen} 
+              onClose={() => setNotifOpen(false)}
+              setUnreadCount={setUnreadCount}
+            />
           </div>
           
           <div className="h-8 w-[1px] bg-white/5" />

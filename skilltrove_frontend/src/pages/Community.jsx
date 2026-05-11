@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LoaderCircle, MessageCircle, Pencil, Plus, Send, ThumbsUp, Trash2, X, BadgeCheck, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'react-toastify';
 
 function FloatingCard({ children, i }) {
   return (
@@ -43,6 +44,7 @@ export default function Community({ onNotify }) {
               id: g._id,
               name: g.name,
               description: g.description,
+              members: g.members || []
             })),
           );
         }
@@ -127,6 +129,33 @@ export default function Community({ onNotify }) {
     try {} catch {}
   }
 
+  /**
+   * @function handleJoinGroup
+   * @description Sends a join request to the server and updates local state.
+   */
+  async function handleJoinGroup(groupId) {
+    if (!user) return;
+    try {
+      const res = await fetch(`http://localhost:5050/api/groups/${groupId}/join`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('skilltrove-token')}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setGroups(prev => prev.map(g => 
+          g.id === groupId ? { ...g, members: [...(g.members || []), user.id] } : g
+        ));
+        toast.success('Joined group successfully!');
+      } else {
+        toast.error(data.message || 'Failed to join');
+      }
+    } catch (err) {
+      toast.error('Network error');
+    }
+  }
+
   return (
     <section className="mx-auto mt-4 max-w-7xl px-6 pb-16 md:px-10">
       <div className="rounded-[2rem] border border-white/20 bg-white/5 p-8 backdrop-blur-2xl">
@@ -157,9 +186,18 @@ export default function Community({ onNotify }) {
                   <div>
                     <h3 className="text-lg font-semibold text-white">{group.name}</h3>
                     <p className="mt-1 text-sm text-zinc-200/85 mb-3">{group.description}</p>
-                    <button className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-cyan-400 hover:text-cyan-300 transition border border-cyan-500/30 rounded-lg px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20">
-                      <Users size={12} /> Join Group
-                    </button>
+                    {group.members?.includes(user?.id) ? (
+                      <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-1.5">
+                        <BadgeCheck size={12} /> Joined
+                      </span>
+                    ) : (
+                      <button 
+                        onClick={() => handleJoinGroup(group.id)}
+                        className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-cyan-400 hover:text-cyan-300 transition border border-cyan-500/30 rounded-lg px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20"
+                      >
+                        <Users size={12} /> Join Group
+                      </button>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <button

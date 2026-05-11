@@ -83,11 +83,10 @@ function Scene() {
       >
         <div className="particles-layer" />
       </motion.div>
-      <NotificationCenter />
       {user?.role === 'faculty' ? (
-        <FacultyNavbar normalized={normalized} unreadCount={unreadCount} />
+        <FacultyNavbar normalized={normalized} unreadCount={unreadCount} setUnreadCount={setUnreadCount} />
       ) : (
-        <Navbar normalized={normalized} unreadCount={unreadCount} />
+        <Navbar normalized={normalized} unreadCount={unreadCount} setUnreadCount={setUnreadCount} />
       )}
       <main className="relative z-10">
         {!modelsReady ? (
