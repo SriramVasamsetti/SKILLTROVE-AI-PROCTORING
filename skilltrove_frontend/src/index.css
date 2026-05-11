@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-main: #020617;
+  --text-main: #F8FAFC;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  background: var(--bg-main);
+  color: var(--text-main);
+  overflow-x: hidden;
+}
+
+.mesh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 10% 15%, rgba(6, 182, 212, 0.15), transparent 36%),
+    radial-gradient(circle at 85% 12%, rgba(249, 115, 22, 0.1), transparent 30%),
+    radial-gradient(circle at 50% 90%, rgba(6, 182, 212, 0.12), transparent 40%),
+    linear-gradient(140deg, #020617, #0f172a 50%, #020617);
+}
+
+.particles-layer {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(6, 182, 212, 0.3) 1px, transparent 1px),
+    radial-gradient(rgba(249, 115, 22, 0.2) 1px, transparent 1px);
+  background-size:
+    42px 42px,
+    64px 64px;
+  background-position:
+    10px 20px,
+    22px 4px;
+}
+
+.glass-chip {
+  border-radius: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  color: #94A3B8;
+  padding: 0.55rem 0.95rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 200ms ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.glass-chip:hover {
+  transform: translateY(-2px);
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(6, 182, 212, 0.3);
+  color: #06B6D4;
+}
+
+.glass-chip.active-link {
+  border-color: rgba(249, 115, 22, 0.8);
+  background: rgba(249, 115, 22, 0.1);
+  color: #F97316;
+  box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.4);
+}
+
+.quiz-warning-pulse {
+  animation: borderPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes borderPulse {
+  0% {
+    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4), 0 0 20px rgba(239, 68, 68, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
