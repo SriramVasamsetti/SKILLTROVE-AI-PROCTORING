@@ -29,8 +29,8 @@ async function signup(req, res) {
     }
   }
 
-  // Generate unique verification token
-  const vToken = crypto.randomBytes(32).toString('hex');
+  // Generate 6-digit OTP
+  const vToken = Math.floor(100000 + Math.random() * 900000).toString();
 
   let user;
   try {
@@ -46,8 +46,8 @@ async function signup(req, res) {
     });
     
     // Send verification link
-    const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email/${vToken}`;
-    sendVerificationEmail(email, verificationLink);
+    // Send verification OTP
+    sendVerificationEmail(email, vToken);
     
   } catch (dbErr) {
     if (dbErr.code === 11000) {
@@ -171,17 +171,21 @@ async function logout(req, res) {
 
 /**
  * @function verifyEmail
- * @description Verifies the user's email using the unique hex token.
+ * @description Verifies the user's email using the 6-digit OTP.
  */
 async function verifyEmail(req, res) {
-  const { token } = req.params;
-  if (!token) {
-    return res.status(400).json({ message: 'Verification token is required' });
+  const { email, otp } = req.body;
+  if (!email || !otp) {
+    return res.status(400).json({ message: 'Email and OTP are required' });
   }
 
-  const user = await User.findOne({ verificationToken: token }).select('+verificationToken');
+  const user = await User.findOne({ email }).select('+verificationToken');
   if (!user) {
-    return res.status(404).json({ message: 'Invalid or expired verification token' });
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  if (user.verificationToken !== otp) {
+    return res.status(400).json({ message: 'Invalid or expired OTP' });
   }
 
   user.isVerified = true;

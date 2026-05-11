@@ -66,6 +66,7 @@ export default function Login() {
       const res = await fetch('http://localhost:5050/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password, faceDescriptor: descriptor }),
       });
       
@@ -78,7 +79,17 @@ export default function Login() {
         throw new Error('Server returned HTML instead of JSON. Check console.');
       }
 
-      if (!res.ok) throw new Error(data?.message || 'Login failed');
+      if (!res.ok) {
+        if (data?.code === 'EMAIL_UNVERIFIED') {
+          setMsg(
+            <span>
+              Account not verified. <button onClick={() => navigate('/verify-email', { state: { email } })} className="text-orange-400 font-bold hover:underline">Click here to verify</button>
+            </span>
+          );
+          return;
+        }
+        throw new Error(data?.message || 'Login failed');
+      }
       login(data.token);
       if (data.user.role === 'faculty') {
         navigate('/faculty-dashboard');

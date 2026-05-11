@@ -78,6 +78,7 @@ export default function Signup() {
       const res = await fetch('http://localhost:5050/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ ...form, faceDescriptor: descriptor }),
       });
       

@@ -17,6 +17,7 @@ import BackToTop from './components/BackToTop';
 import PrivateRoute from './components/PrivateRoute';
 import Community from './pages/Community';
 import Leaderboard from './pages/Leaderboard';
+import VerifyEmail from './pages/VerifyEmail';
 import About from './pages/About';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -168,6 +169,7 @@ function Scene() {
               <Route path="/report/:attemptId" element={<PrivateRoute><ReportCard /></PrivateRoute>} />
               <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
               <Route path="/about" element={<PrivateRoute><About /></PrivateRoute>} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
 

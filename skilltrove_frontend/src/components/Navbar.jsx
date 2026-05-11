@@ -1,16 +1,15 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Bell, Search, User, LogOut, ShieldCheck, BadgeCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationCenter from './NotificationCenter';
 
-
 /**
  * @function LogoBadge
  * @description Renders the SkillTrove brand identity with a security badge.
  */
-function LogoBadge({ normalized }) {
+const LogoBadge = React.memo(() => {
   return (
     <NavLink to="/" className="group flex items-center gap-3">
       <div className="relative h-10 w-10 overflow-hidden rounded-xl bg-orange-500 shadow-lg transition-transform group-hover:scale-110">
@@ -25,19 +24,28 @@ function LogoBadge({ normalized }) {
       </div>
     </NavLink>
   );
-}
+});
 
 /**
  * @function StudentNavbar
  * @description Navigation component for Student users with role-based links and glassmorphism UI.
  */
-export default function Navbar({ normalized, unreadCount, setUnreadCount }) {
+const Navbar = ({ normalized, unreadCount, setUnreadCount }) => {
   const { isAuthenticated, user, logout } = useAuth();
   const [notifOpen, setNotifOpen] = useState(false);
-  const navClass = ({ isActive }) =>
+
+  const navClass = useCallback(({ isActive }) =>
     `relative text-sm font-bold tracking-tight transition-colors ${
       isActive ? 'text-orange-500' : 'text-zinc-400 hover:text-white'
-    }`;
+    }`, []);
+
+  const handleToggleNotif = useCallback(() => {
+    setNotifOpen(prev => !prev);
+  }, []);
+
+  const handleCloseNotif = useCallback(() => {
+    setNotifOpen(false);
+  }, []);
 
   return (
     <motion.nav
@@ -46,7 +54,7 @@ export default function Navbar({ normalized, unreadCount, setUnreadCount }) {
       className="sticky top-0 z-[100] border-b border-white/5 bg-slate-950/80 py-4 backdrop-blur-xl"
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 lg:px-10">
-        <LogoBadge normalized={normalized} />
+        <LogoBadge />
 
         <div className="hidden items-center gap-8 md:flex">
           {isAuthenticated ? (
@@ -69,7 +77,7 @@ export default function Navbar({ normalized, unreadCount, setUnreadCount }) {
             <>
               <div className="relative">
                 <div 
-                  onClick={() => setNotifOpen(!notifOpen)}
+                  onClick={handleToggleNotif}
                   className={`relative cursor-pointer transition-colors ${notifOpen ? 'text-orange-500' : 'text-zinc-400 hover:text-white'}`}
                 >
                   <Bell size={20} />
@@ -82,7 +90,7 @@ export default function Navbar({ normalized, unreadCount, setUnreadCount }) {
                 
                 <NotificationCenter 
                   isOpen={notifOpen} 
-                  onClose={() => setNotifOpen(false)}
+                  onClose={handleCloseNotif}
                   setUnreadCount={setUnreadCount}
                 />
               </div>
@@ -116,4 +124,6 @@ export default function Navbar({ normalized, unreadCount, setUnreadCount }) {
       </div>
     </motion.nav>
   );
-}
+};
+
+export default React.memo(Navbar);

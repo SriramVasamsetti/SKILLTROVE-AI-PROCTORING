@@ -6,6 +6,7 @@ const router = express.Router();
 router.use(authMiddleware(true));
 
 router.get('/', ctrl.mine);
+router.get('/mine', ctrl.mine);
 router.patch('/:id/read', ctrl.markRead);
 router.patch('/read-all', ctrl.markAllRead);
 

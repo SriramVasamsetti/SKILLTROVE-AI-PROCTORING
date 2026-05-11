@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, Check, Clock, Info, ShieldAlert, X, CheckCheck } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -7,12 +7,8 @@ import { useAuth } from '../context/AuthContext';
 /**
  * @function NotificationCenter
  * @description Manages real-time notification polling and provides the interactive dropdown UI.
- * @param {Object} props - Component properties.
- * @param {boolean} props.isOpen - Whether the dropdown panel is visible.
- * @param {Function} props.onClose - Callback to close the panel.
- * @param {Function} props.setUnreadCount - State setter for the badge count.
  */
-export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) {
+const NotificationCenter = ({ isOpen, onClose, setUnreadCount }) => {
   const { token, user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const isFirstLoad = useRef(true);
@@ -26,7 +22,7 @@ export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) 
 
     async function fetchNotifications() {
       try {
-        const res = await fetch('http://localhost:5050/api/notifications', {
+        const res = await fetch('http://localhost:5050/api/notifications/mine', {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!res.ok) return;
@@ -61,7 +57,7 @@ export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) 
    * @function handleMarkRead
    * @description Marks a specific notification as read on the server.
    */
-  const handleMarkRead = async (id) => {
+  const handleMarkRead = useCallback(async (id) => {
     try {
       await fetch(`http://localhost:5050/api/notifications/${id}/read`, {
         method: 'PATCH',
@@ -72,13 +68,13 @@ export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) 
     } catch (err) {
       toast.error('Failed to update notification');
     }
-  };
+  }, [token, setUnreadCount]);
 
   /**
    * @function handleMarkAllRead
    * @description Marks all notifications for the user as read.
    */
-  const handleMarkAllRead = async () => {
+  const handleMarkAllRead = useCallback(async () => {
     try {
       const res = await fetch('http://localhost:5050/api/notifications/read-all', {
         method: 'PATCH',
@@ -92,7 +88,7 @@ export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) 
     } catch (err) {
       toast.error('Failed to clear notifications');
     }
-  };
+  }, [token, setUnreadCount]);
 
   return (
     <AnimatePresence>
@@ -162,4 +158,6 @@ export default function NotificationCenter({ isOpen, onClose, setUnreadCount }) 
       )}
     </AnimatePresence>
   );
-}
+};
+
+export default React.memo(NotificationCenter);
