@@ -151,7 +151,16 @@ function normalizeQuestion(q) {
 }
 
 async function generateAiQuiz(req, res) {
-  const { subject, count = 10, provider = 'gemini' } = req.body;
+  const { 
+    subject, 
+    title,
+    count = 10, 
+    provider = 'gemini', 
+    type = 'Mixed', 
+    bloomLevel = 'Mixed',
+    deadline 
+  } = req.body;
+
   if (!subject) return res.status(400).json({ message: 'subject required' });
   if (!['openai', 'gemini'].includes(provider)) {
     return res.status(400).json({ message: 'provider must be openai or gemini' });
@@ -164,23 +173,25 @@ async function generateAiQuiz(req, res) {
     rawQuestions = buildMockQuizQuestions(subject);
     aiProviderStored = 'mock';
   } else {
-    rawQuestions = await generateMixedQuestions(subject, provider, count);
+    rawQuestions = await generateMixedQuestions(subject, provider, count, type, bloomLevel);
   }
 
   let quiz;
   try {
     quiz = await Quiz.create({
       subject,
+      title: title || `${subject} Assessment`,
       questions: rawQuestions.map((q) => normalizeQuestion(q)),
       aiProvider: aiProviderStored,
-      ...(req.user?.userId ? { createdBy: req.user.userId } : {}),
+      type: type !== 'Mixed' ? type : undefined,
+      bloomLevel: bloomLevel !== 'Mixed' ? bloomLevel : undefined,
+      deadline: deadline ? new Date(deadline) : undefined,
+      createdBy: req.user.userId,
+      assignedBy: req.user.role === 'faculty' ? req.user.userId : undefined,
     });
   } catch (err) {
     console.error('[quiz/generate] Database error:', err.message);
-    return res.status(503).json({
-      message: 'Could not save quiz. Check database connection.',
-      ...(process.env.NODE_ENV !== 'production' && { detail: err.message }),
-    });
+    return res.status(503).json({ message: 'Could not save quiz.' });
   }
 
   res.status(201).json(quiz);
@@ -203,10 +214,22 @@ async function createManualQuiz(req, res) {
 }
 
 async function listQuizzes(req, res) {
-  const { subject } = req.query;
+  const { subject, assignedOnly } = req.query;
   const filter = { archived: false };
+  
+  if (assignedOnly === 'true') {
+    filter.assignedBy = { $exists: true };
+  } else {
+    filter.assignedBy = { $exists: false };
+  }
+
   if (subject) filter.subject = new RegExp(subject, 'i');
-  const items = await Quiz.find(filter).sort({ createdAt: -1 }).limit(100).lean();
+  
+  const items = await Quiz.find(filter)
+    .sort({ createdAt: -1 })
+    .populate('assignedBy', 'name')
+    .limit(100)
+    .lean();
   res.json(items);
 }
 

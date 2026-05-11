@@ -5,6 +5,15 @@ const SCORE_THRESHOLD = 0.6;
 const SMOOTHING_MS = 2000;
 const MISSING_PAUSE_MS = 3000;
 
+/**
+ * @function useFacePresence
+ * @description Hook to monitor face presence, count, and identity during an assessment.
+ * @param {React.RefObject} videoRef - Reference to the video element.
+ * @param {boolean} enabled - Whether the proctoring logic is active.
+ * @param {Function} onTerminate - Callback function to call when a critical security violation occurs.
+ * @param {Array<number>|Object} originalDescriptor - The face descriptor of the authorized user.
+ * @returns {Object} - Detection stats and status flags.
+ */
 export function useFacePresence(videoRef, enabled = true, onTerminate = null, originalDescriptor = null) {
   const [peopleCount, setPeopleCount] = useState(0);
   const [modelReady, setModelReady] = useState(false);
@@ -14,6 +23,7 @@ export function useFacePresence(videoRef, enabled = true, onTerminate = null, or
   const [warningsCount, setWarningsCount] = useState(0);
   const [noFaceTooLong, setNoFaceTooLong] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
+  
   const stateRef = useRef({
     multiSince: null,
     noneSince: null,
@@ -22,10 +32,14 @@ export function useFacePresence(videoRef, enabled = true, onTerminate = null, or
     modelLoadError: false,
     lastWarning: '',
     unauthCount: 0,
+    lastIdentityCheck: 0,
   });
 
   const matcherRef = useRef(null);
 
+  /**
+   * @description Initializes the FaceMatcher with the authorized user's descriptor.
+   */
   useEffect(() => {
     if (originalDescriptor) {
       try {
@@ -34,13 +48,17 @@ export function useFacePresence(videoRef, enabled = true, onTerminate = null, or
           : Object.values(originalDescriptor);
         const float32Desc = new Float32Array(arr);
         const labeledDescriptor = new faceapi.LabeledFaceDescriptors('user', [float32Desc]);
-        matcherRef.current = new faceapi.FaceMatcher([labeledDescriptor], 0.4);
+        // Set strict threshold to 0.42 for production-grade security
+        matcherRef.current = new faceapi.FaceMatcher([labeledDescriptor], 0.42);
       } catch (err) {
         console.error('Failed to parse face descriptor:', err);
       }
     }
   }, [originalDescriptor]);
 
+  /**
+   * @description Loads the required face-api models.
+   */
   useEffect(() => {
     let active = true;
     async function loadModels() {
@@ -65,10 +83,13 @@ export function useFacePresence(videoRef, enabled = true, onTerminate = null, or
     };
   }, [enabled, retryTick]);
 
+  /**
+   * @description Main proctoring loop that runs every 500ms.
+   */
   useEffect(() => {
     if (!enabled || !modelReady) return undefined;
 
-    const run = async () => {
+    const runProctoringCheck = async () => {
       const video = videoRef.current;
       if (!video || video.readyState < 2) return;
       try {
@@ -79,6 +100,7 @@ export function useFacePresence(videoRef, enabled = true, onTerminate = null, or
             scoreThreshold: SCORE_THRESHOLD,
           }),
         ).withFaceLandmarks().withFaceDescriptors();
+        
         const count = detections.length;
         setPeopleCount(count);
 
@@ -103,10 +125,19 @@ export function useFacePresence(videoRef, enabled = true, onTerminate = null, or
         } else if (count === 1) {
           setNoFaceTooLong(false);
           
-          if (matcherRef.current && detections[0].descriptor) {
+          // Identity Verification Check every 30 seconds
+          if (matcherRef.current && detections[0].descriptor && (now - stateRef.current.lastIdentityCheck > 30000)) {
              const match = matcherRef.current.findBestMatch(detections[0].descriptor);
-             if (match.label === 'unknown' || match.distance > 0.4) {
-                newWarning = 'STOP! Unauthorized User Detected';
+             stateRef.current.lastIdentityCheck = now;
+             
+             if (match.label === 'unknown') {
+                newWarning = 'Identity Mismatch Detected! Please stay in front of the camera.';
+                stateRef.current.unauthCount += 1;
+                
+                // Strict policy: Terminate after 2 identity mismatches
+                if (stateRef.current.unauthCount >= 2 && onTerminate) {
+                   onTerminate();
+                }
              }
           }
           
@@ -143,10 +174,7 @@ export function useFacePresence(videoRef, enabled = true, onTerminate = null, or
         if (newWarning && newWarning !== stateRef.current.lastWarning) {
           setWarningsCount(prev => {
             const next = prev + 1;
-            if (newWarning === 'STOP! Unauthorized User Detected') {
-              stateRef.current.unauthCount += 1;
-              if (stateRef.current.unauthCount >= 2 && onTerminate) onTerminate();
-            }
+            // Terminate after 3 general proctoring warnings
             if (next >= 3 && onTerminate) {
               onTerminate();
             }
@@ -160,13 +188,13 @@ export function useFacePresence(videoRef, enabled = true, onTerminate = null, or
       }
     };
 
-    stateRef.current.loopId = window.setInterval(run, 500);
+    stateRef.current.loopId = window.setInterval(runProctoringCheck, 500);
     return () => {
       if (stateRef.current.loopId) {
         window.clearInterval(stateRef.current.loopId);
       }
     };
-  }, [enabled, modelReady, videoRef]);
+  }, [enabled, modelReady, videoRef, onTerminate]);
 
   return {
     peopleCount,

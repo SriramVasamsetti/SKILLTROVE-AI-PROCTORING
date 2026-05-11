@@ -4,6 +4,8 @@ const { assertEmail, normalizeFaceDescriptor } = require('../middleware/validato
 const { faceMatch } = require('../utils/faceMatching');
 const { ROLES, DEFAULT_FACE_DISTANCE_THRESHOLD } = require('../config/constants');
 const { signAuthToken } = require('../utils/token');
+const { sendVerificationEmail } = require('../utils/email');
+const crypto = require('crypto');
 
 async function signup(req, res) {
   const { name, email, password, role, profileImage } = req.body;
@@ -27,6 +29,9 @@ async function signup(req, res) {
     }
   }
 
+  // Generate unique verification token
+  const vToken = crypto.randomBytes(32).toString('hex');
+
   let user;
   try {
     user = await User.create({
@@ -36,7 +41,14 @@ async function signup(req, res) {
       faceDescriptor,
       profileImage,
       role: chosenRole,
+      verificationToken: vToken,
+      isVerified: false
     });
+    
+    // Send verification link
+    const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email/${vToken}`;
+    sendVerificationEmail(email, verificationLink);
+    
   } catch (dbErr) {
     if (dbErr.code === 11000) {
       return res.status(409).json({ message: 'Email already registered' });
@@ -48,9 +60,9 @@ async function signup(req, res) {
     });
   }
 
-  let token;
+  let authToken;
   try {
-    token = signAuthToken({
+    authToken = signAuthToken({
       userId: String(user._id),
       email: user.email,
       role: user.role,
@@ -60,8 +72,21 @@ async function signup(req, res) {
     return res.status(500).json({ message: 'Server auth configuration error (JWT_SECRET).' });
   }
 
+  // Set HttpOnly Cookies for enhanced security (XSS prevention)
+  res.cookie('token', authToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  });
+  res.cookie('role', user.role, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000
+  });
+
   return res.status(201).json({
-    token,
     user: {
       id: user._id,
       name: user.name,
@@ -95,19 +120,80 @@ async function login(req, res) {
     throw err;
   }
 
+  if (!user.isVerified) {
+    return res.status(403).json({ 
+      message: 'Email not verified. Please verify your account to login.',
+      code: 'EMAIL_UNVERIFIED'
+    });
+  }
+
   const token = signAuthToken({
     userId: String(user._id),
     email: user.email,
     role: user.role,
   });
 
-  res.json({
-    token,
-    user: { id: user._id, name: user.name, email: user.email, role: user.role, profileImage: user.profileImage, faceDescriptor: user.faceDescriptor },
+  // Set HttpOnly Cookies
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000
   });
+  res.cookie('role', user.role, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000
+  });
+
+  res.json({
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      profileImage: user.profileImage,
+      faceDescriptor: user.faceDescriptor,
+    },
+  });
+}
+
+/**
+ * @function logout
+ * @description Clears security cookies to end session.
+ */
+async function logout(req, res) {
+  res.clearCookie('token');
+  res.clearCookie('role');
+  res.json({ message: 'Logged out successfully' });
+}
+
+/**
+ * @function verifyEmail
+ * @description Verifies the user's email using the unique hex token.
+ */
+async function verifyEmail(req, res) {
+  const { token } = req.params;
+  if (!token) {
+    return res.status(400).json({ message: 'Verification token is required' });
+  }
+
+  const user = await User.findOne({ verificationToken: token }).select('+verificationToken');
+  if (!user) {
+    return res.status(404).json({ message: 'Invalid or expired verification token' });
+  }
+
+  user.isVerified = true;
+  user.verificationToken = undefined;
+  await user.save();
+
+  res.json({ message: 'Account verified successfully. You can now login.' });
 }
 
 module.exports = {
   signup: asyncHandler(signup),
   login: asyncHandler(login),
+  logout: asyncHandler(logout),
+  verifyEmail: asyncHandler(verifyEmail),
 };

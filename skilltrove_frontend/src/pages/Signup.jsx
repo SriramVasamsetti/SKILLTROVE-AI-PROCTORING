@@ -91,12 +91,10 @@ export default function Signup() {
       }
 
       if (!res.ok) throw new Error(data?.message || 'Signup failed');
-      login(data.token);
-      if (data.user.role === 'faculty') {
-        navigate('/faculty-dashboard');
-      } else {
-        navigate('/');
-      }
+      
+      // Navigate to email verification instead of logging in
+      navigate('/verify-email', { state: { email: form.email } });
+
     } catch (e) {
       setMsg(e.message);
       if (e.message.toLowerCase().includes('biometric')) {

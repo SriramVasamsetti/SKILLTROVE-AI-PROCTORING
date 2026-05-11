@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, LoaderCircle, LockKeyhole, Radar, ShieldCheck, Users, Video } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { CheckCircle2, LoaderCircle, LockKeyhole, Radar, ShieldCheck, Users, Video, Camera, ShieldAlert } from 'lucide-react';
 import { useFacePresence } from '../hooks/useFacePresence';
 import { useAuth } from '../context/AuthContext';
 
 const API_BASE = 'http://localhost:5050';
 
+/**
+ * @function ReadyCard
+ * @description specialized card for system readiness status.
+ */
 function ReadyCard({ title, verified, icon: Icon, delay }) {
   return (
     <motion.article
@@ -51,6 +56,11 @@ function ReadyCard({ title, verified, icon: Icon, delay }) {
   );
 }
 
+/**
+ * @function SystemCheck
+ * @description Comprehensive hardware and biometric verification before exam initialization.
+ * Implements hardware-locked camera logic to prioritize integrated webcams.
+ */
 export default function SystemCheck({ normalized, onBack, onStartQuiz }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -62,6 +72,12 @@ export default function SystemCheck({ normalized, onBack, onStartQuiz }) {
   const [isLoading, setIsLoading] = useState(false);
   const [topic, setTopic] = useState('Operating Systems');
   const [error, setError] = useState('');
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [isHardwareLocked, setIsHardwareLocked] = useState(false);
+  const location = useLocation();
+  const passedQuiz = location.state?.quiz;
+  
   const { user } = useAuth();
   
   const {
@@ -73,38 +89,77 @@ export default function SystemCheck({ normalized, onBack, onStartQuiz }) {
     retryModels,
   } = useFacePresence(videoRef, Boolean(stream), null, user?.faceDescriptor);
 
-  useEffect(() => {
-    let mounted = true;
-    async function initMedia() {
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (!mounted) return;
-        setStream(s);
-        setCameraOk(true);
-        setMicOk(true);
-        if (videoRef.current) {
-          videoRef.current.srcObject = s;
-        }
+  /**
+   * @function initMedia
+   * @description Enumerates media devices and initializes the primary camera stream.
+   * Prioritizes 'Integrated' or 'Built-in' cameras as per security policy.
+   * @param {string} deviceId - Optional specific device ID to use.
+   */
+  async function initMedia(deviceId = '') {
+    try {
+      // Stop existing tracks
+      stream?.getTracks?.().forEach((t) => t.stop());
+      audioCtx?.ctx?.close?.();
 
-        const ctx = new window.AudioContext();
-        const source = ctx.createMediaStreamSource(s);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 128;
-        source.connect(analyser);
-        setAudioCtx({ ctx, analyser });
-      } catch (e) {
-        setError('Camera/Mic permission denied. Please allow and retry.');
+      // Enumerate all video sources first if not done
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const vDevices = allDevices.filter(d => d.kind === 'videoinput');
+      setVideoDevices(vDevices);
+
+      // Identify integrated camera
+      const integrated = vDevices.find(d => 
+        /integrated|built-in|front/i.test(d.label)
+      );
+
+      let targetId = deviceId;
+      if (!targetId && integrated) {
+        targetId = integrated.deviceId;
+        setIsHardwareLocked(true);
+      } else if (!targetId && vDevices.length > 0) {
+        targetId = vDevices[0].deviceId;
+        setIsHardwareLocked(false);
       }
+
+      const constraints = {
+        audio: true,
+        video: targetId ? { deviceId: { exact: targetId } } : true
+      };
+
+      const s = await navigator.mediaDevices.getUserMedia(constraints);
+      setStream(s);
+      setCameraOk(true);
+      setMicOk(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+      }
+      if (targetId) setSelectedDeviceId(targetId);
+
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = ctx.createMediaStreamSource(s);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 128;
+      source.connect(analyser);
+      setAudioCtx({ ctx, analyser });
+      setError('');
+    } catch (e) {
+      console.error('Media init error:', e);
+      setError('Camera/Mic permission denied or hardware missing. Please check connection.');
+      setCameraOk(false);
+      setMicOk(false);
     }
+  }
+
+  useEffect(() => {
     initMedia();
     return () => {
-      mounted = false;
       stream?.getTracks?.().forEach((t) => t.stop());
       audioCtx?.ctx?.close?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * @description Visualizes live microphone frequency data on a canvas.
+   */
   useEffect(() => {
     if (!audioCtx?.analyser || !canvasRef.current) return undefined;
     const canvas = canvasRef.current;
@@ -126,6 +181,10 @@ export default function SystemCheck({ normalized, onBack, onStartQuiz }) {
     return () => cancelAnimationFrame(raf);
   }, [audioCtx]);
 
+  /**
+   * @function requestMovement
+   * @description Requests permission for accelerometer/gyroscope sensors.
+   */
   async function requestMovement() {
     try {
       if (typeof window.DeviceMotionEvent?.requestPermission === 'function') {
@@ -136,45 +195,54 @@ export default function SystemCheck({ normalized, onBack, onStartQuiz }) {
       }
     } catch {
       setMovementOk(false);
-      setError('Movement permission blocked on this device/browser.');
+      setError('Movement permission blocked on this device.');
     }
   }
 
+  // Biometric Lock: Must match signup snapshot (handled by useFacePresence and user.faceDescriptor)
+  const isBiometricallyVerified = peopleCount === 1 && !warning?.includes('Identity Mismatch') && !warning;
   const peopleStable = peopleCount === 1 && !warning;
-  const allGreen = cameraOk && micOk && movementOk && peopleStable;
+  const allGreen = cameraOk && micOk && movementOk && isBiometricallyVerified;
 
   const progress = useMemo(() => {
-    const done = [cameraOk, micOk, movementOk, peopleStable].filter(Boolean).length;
+    const done = [cameraOk, micOk, movementOk, isBiometricallyVerified].filter(Boolean).length;
     return Math.round((done / 4) * 100);
-  }, [cameraOk, micOk, movementOk, peopleStable]);
+  }, [cameraOk, micOk, movementOk, isBiometricallyVerified]);
 
+  /**
+   * @function handleStartQuiz
+   * @description Final validation and quiz generation trigger.
+   */
   async function handleStartQuiz() {
     if (!allGreen || isLoading) return;
     setIsLoading(true);
     setError('');
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    
+    // If quiz was already passed (from Assigned or Practice Selection)
+    if (passedQuiz) {
+      onStartQuiz({
+        quizId: passedQuiz._id,
+        questions: passedQuiz.questions || [],
+        subject: passedQuiz.subject || topic,
+        stream,
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE}/api/quiz/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: topic || 'General Knowledge', provider: 'openai' }),
-        signal: controller.signal
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('skilltrove-token')}`
+        },
+        body: JSON.stringify({ subject: topic || 'General Knowledge' }),
       });
-      clearTimeout(timeoutId);
       
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (err) {
-        console.error('Non-JSON response:', text);
-        throw new Error('Server returned HTML instead of JSON. Check backend CORS or endpoints.');
-      }
-      
+      const data = await response.json();
       if (!response.ok) throw new Error(data?.message || 'Failed to generate quiz');
+      
       onStartQuiz({
         quizId: data?._id,
         questions: data?.questions || [],
@@ -190,136 +258,126 @@ export default function SystemCheck({ normalized, onBack, onStartQuiz }) {
 
   return (
     <section className={`mx-auto mt-4 max-w-7xl px-6 pb-16 pt-4 md:px-10 ${warning ? 'quiz-warning-pulse' : ''}`}>
-      <div className="relative overflow-hidden rounded-[2rem] border border-white/20 bg-white/5 p-7 backdrop-blur-2xl md:p-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-500/15 via-transparent to-red-500/8" />
+      <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900/40 p-8 backdrop-blur-3xl md:p-12">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-red-500/5" />
         <div className="relative z-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-6">
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-orange-200">Pre-Flight Dashboard</p>
-              <h2 className="mt-2 text-3xl font-bold text-white md:text-4xl">System Readiness Matrix</h2>
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-orange-500">Security Diagnostic</p>
+              <h2 className="mt-2 text-3xl font-black text-white md:text-5xl tracking-tight">System <span className="text-orange-500">Readiness</span></h2>
             </div>
-            <div className="rounded-2xl border border-orange-300/30 bg-black/20 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-orange-200">Readiness Score</p>
-              <p className="text-2xl font-bold text-white">{progress}%</p>
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_.9fr]">
-            <motion.div
-              animate={{ x: normalized.x * 12, y: normalized.y * 8 }}
-              className="relative flex items-center justify-center rounded-3xl border border-white/20 bg-black/25 p-6 backdrop-blur-xl"
-            >
-              <motion.div
-                className="relative h-72 w-72 overflow-hidden rounded-full border-2 border-orange-300/40 bg-black/60"
-                animate={{ rotate: 360 }}
-                transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
-                style={{ boxShadow: '0 0 35px rgba(255,132,58,.45)' }}
-              >
-                <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
-              </motion.div>
-            </motion.div>
-
-            <div className="space-y-5">
-              <ReadyCard title="Camera Access" verified={cameraOk} icon={Video} delay={0.1} />
-              <ReadyCard title="Microphone Access" verified={micOk} icon={Radar} delay={0.2} />
-              <ReadyCard title="Movement Sensor" verified={movementOk} icon={ShieldCheck} delay={0.3} />
-              <ReadyCard title="Single Face Presence" verified={peopleStable} icon={Users} delay={0.4} />
-              <button
-                type="button"
-                onClick={requestMovement}
-                className="rounded-2xl border border-orange-300/40 bg-orange-500/15 px-4 py-2 text-sm font-semibold text-orange-100"
-              >
-                Verify Movement Sensor
-              </button>
+            <div className="rounded-2xl border border-white/10 bg-black/40 px-6 py-4 text-center">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Score</p>
+              <p className="text-3xl font-black text-white">{progress}%</p>
             </div>
           </div>
 
-          <div className="mt-8 rounded-3xl border border-white/15 bg-black/30 p-4">
-            {modelLoading && (
-              <div className="mb-3 flex items-center gap-2 rounded-xl border border-orange-400/40 bg-orange-500/10 px-3 py-2 text-sm text-orange-100">
-                <LoaderCircle size={16} className="animate-spin" />
-                Model Loading... preparing face detector
+          <div className="mt-12 grid gap-10 lg:grid-cols-[1fr_.8fr]">
+            <div className="flex flex-col gap-6">
+              <div className="relative flex items-center justify-center rounded-[2.5rem] border border-white/10 bg-black/20 p-8">
+                 <div className="relative h-80 w-80 overflow-hidden rounded-full border-4 border-orange-500/20 shadow-[0_0_50px_rgba(249,115,22,0.15)]">
+                   <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+                 </div>
+                 {isHardwareLocked && (
+                   <div className="absolute top-4 right-4 flex items-center gap-2 rounded-xl bg-orange-500/10 border border-orange-500/20 px-3 py-1 text-[10px] font-black text-orange-500 uppercase tracking-widest">
+                     <ShieldCheck size={14} />
+                     Hardware Locked
+                   </div>
+                 )}
               </div>
-            )}
-            {modelError && (
-              <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-red-400/45 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                <span>{modelError}</span>
+
+              {videoDevices.length > 1 && (
+                <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-orange-400 mb-2 block">Available Video Sources</label>
+                  <div className="flex items-center gap-3">
+                    <Camera size={18} className="text-zinc-500" />
+                    <select 
+                      disabled={isHardwareLocked}
+                      value={selectedDeviceId}
+                      onChange={(e) => {
+                        setSelectedDeviceId(e.target.value);
+                        initMedia(e.target.value);
+                      }}
+                      className="flex-1 bg-transparent text-sm text-white font-bold outline-none cursor-pointer disabled:opacity-50"
+                    >
+                      {videoDevices.map((device, i) => (
+                        <option key={device.deviceId} value={device.deviceId} className="bg-slate-900">
+                          {device.label || `Camera ${i + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {isHardwareLocked && <p className="mt-2 text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Integrated camera enforced for maximum integrity.</p>}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <ReadyCard title="Optical Presence" verified={cameraOk} icon={Video} delay={0.1} />
+              <ReadyCard title="Audio Spectrum" verified={micOk} icon={Radar} delay={0.2} />
+              <ReadyCard title="Inertial Link" verified={movementOk} icon={ShieldCheck} delay={0.3} />
+              <ReadyCard title="Biometric Lock" verified={isBiometricallyVerified} icon={Users} delay={0.4} />
+              
+              {!movementOk && (
                 <button
                   type="button"
-                  onClick={retryModels}
-                  className="rounded-lg border border-red-300/45 bg-red-500/15 px-2 py-1 text-xs font-semibold"
+                  onClick={requestMovement}
+                  className="w-full rounded-2xl bg-white/5 border border-white/10 py-4 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white/10"
                 >
-                  Retry
+                  Request Sensor Access
                 </button>
-              </div>
-            )}
-            <div className="mb-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em]">
-              <span className="rounded-lg border border-white/20 bg-black/30 px-2 py-1 text-zinc-200">
-                [PEOPLE: {peopleCount > 1 ? 'MULTIPLE!' : peopleCount}]
-              </span>
-              {warning && warning !== 'STOP! Unauthorized User Detected' && (
-                <span className="rounded-lg border border-red-400/50 bg-red-500/15 px-2 py-1 text-red-200">
-                  [{warning}]
-                </span>
-              )}
-              {warning === 'STOP! Unauthorized User Detected' && (
-                <span className="rounded-lg border border-red-500 bg-red-600/30 px-3 py-1 font-bold text-white shadow-[0_0_15px_rgba(239,68,68,0.6)] animate-pulse">
-                  [UNAUTHORIZED USER DETECTED]
-                </span>
-              )}
-              {noFaceTooLong && (
-                <span className="rounded-lg border border-red-400/50 bg-red-500/15 px-2 py-1 text-red-200">
-                  [NO FACE {'>'} 3S]
-                </span>
               )}
             </div>
-            <p className="mb-3 text-xs uppercase tracking-[0.2em] text-orange-200">Live Voice Visualizer</p>
-            <canvas ref={canvasRef} width={980} height={120} className="h-28 w-full rounded-2xl bg-black/40" />
           </div>
 
-          {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
+          <div className="mt-10 space-y-6">
+            <div className="rounded-3xl border border-white/5 bg-black/40 p-6">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 mb-4 text-center">Acoustic Signal Analysis</p>
+              <canvas ref={canvasRef} width={980} height={100} className="h-24 w-full rounded-2xl" />
+            </div>
 
-          <div className="mt-6">
-            <p className="mb-2 text-xs uppercase tracking-[0.2em] text-orange-200">Quiz Topic</p>
-            <input
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g., ReactJS, Aptitude, Operating Systems"
-              className="w-full max-w-sm rounded-xl border border-white/20 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-orange-500/50"
-            />
+            <div className="flex flex-col sm:flex-row gap-6 items-end">
+              <div className="flex-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 block">Assessment Focus</label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g., Computer Networks, ReactJS, Data Structures"
+                  className="w-full rounded-2xl border border-white/10 bg-black/40 px-6 py-4 text-white outline-none focus:border-orange-500 transition-all font-bold"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-8 py-4 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white/10"
+                >
+                  Abort
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartQuiz}
+                  disabled={!allGreen || isLoading}
+                  className={`rounded-2xl px-10 py-4 text-xs font-black uppercase tracking-[0.2em] transition-all ${
+                    allGreen
+                      ? 'bg-emerald-500 text-slate-950 shadow-xl shadow-emerald-500/20 hover:scale-105 active:scale-95'
+                      : 'bg-white/5 text-zinc-600 border border-white/5 cursor-not-allowed'
+                  }`}
+                >
+                  {isLoading ? 'Engineering Quiz...' : 'Engage Assessment'}
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-4">
-            <motion.button
-              type="button"
-              whileHover={{ y: -3 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleStartQuiz}
-              disabled={!allGreen || isLoading}
-              className={`rounded-2xl px-6 py-3 text-sm font-bold uppercase tracking-[0.16em] ${
-                allGreen
-                  ? 'border border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
-                  : 'cursor-not-allowed border border-red-400/40 bg-red-500/15 text-red-200/80'
-              }`}
-            >
-              {isLoading ? (
-                <span className="inline-flex items-center gap-2">
-                  <LoaderCircle size={14} className="animate-spin" /> Generating...
-                </span>
-              ) : (
-                'Start Quiz'
-              )}
-            </motion.button>
-
-            <button
-              type="button"
-              onClick={onBack}
-              className="rounded-2xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white/90"
-            >
-              Back to Hero
-            </button>
-          </div>
+          {error && (
+            <div className="mt-6 rounded-2xl border border-red-500/20 bg-red-500/5 p-4 flex items-center gap-3">
+              <ShieldAlert className="text-red-500" size={20} />
+              <p className="text-sm font-bold text-red-400">{error}</p>
+            </div>
+          )}
         </div>
       </div>
     </section>

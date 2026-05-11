@@ -10,5 +10,7 @@ const limiter = rateLimit({
 
 router.post('/signup', limiter, ctrl.signup);
 router.post('/login', limiter, ctrl.login);
+router.post('/logout', ctrl.logout);
+router.get('/verify-email/:token', ctrl.verifyEmail);
 
 module.exports = router;

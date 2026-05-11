@@ -26,6 +26,7 @@ const questionSchema = new mongoose.Schema(
 const quizSchema = new mongoose.Schema(
   {
     subject: { type: String, required: true, trim: true, index: true },
+    title: { type: String, trim: true },
     /** AI-produced question set — hard cap 10 enforced in controller utils */
     questions: {
       type: [questionSchema],
@@ -38,6 +39,10 @@ const quizSchema = new mongoose.Schema(
         },
       ],
     },
+    type: { type: String, enum: QUIZ_TYPES },
+    bloomLevel: { type: String, enum: BLOOM_LEVELS },
+    deadline: { type: Date },
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     aiProvider: {
       type: String,
       enum: ['openai', 'gemini', 'manual', 'mock'],

@@ -5,6 +5,7 @@ const ctrl = require('../controllers/report.controller');
 const router = express.Router();
 router.use(authMiddleware(true));
 
+router.get('/attempt/:attemptId', ctrl.getAttemptReport);
 router.get('/attempt/:attemptId/pdf', ctrl.pdfReport);
 router.get('/download', ctrl.pdfDownload);
 

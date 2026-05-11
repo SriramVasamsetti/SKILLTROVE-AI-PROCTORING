@@ -6,6 +6,7 @@ const router = express.Router();
 router.use(authMiddleware(true));
 
 router.get('/me', ctrl.getProfile);
+router.get('/profile', ctrl.getProfile);
 router.patch('/me', ctrl.updateProfile);
 router.patch('/me/password', ctrl.updatePassword);
 router.delete('/me', ctrl.deleteAccount);

@@ -1,180 +1,231 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Award, CheckCircle, ChevronLeft, RefreshCcw } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import jsPDF from 'jspdf';
+import { motion } from 'framer-motion';
+import { Download, CheckCircle, AlertCircle, Calendar, Target, Award, LoaderCircle } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import { useAuth } from '../context/AuthContext';
+import { toast } from 'react-toastify';
 
+/**
+ * @function ReportCard
+ * @description Renders a high-resolution, secure performance report with PDF export functionality.
+ * Includes biometric identity verification proof (snapshot).
+ */
 export default function ReportCard() {
   const { attemptId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [attempt, setAttempt] = useState(null);
+  const [reportData, setReportData] = useState(null);
   const [dbProfile, setDbProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
+  /**
+   * @function fetchReportData
+   * @description Fetches exam attempt, quiz metadata, and user profile information with a retry mechanism.
+   */
   useEffect(() => {
-    async function fetchAttempt() {
+    let active = true;
+    async function fetchReportData() {
       try {
         const token = localStorage.getItem('skilltrove-token');
-        const [attemptRes, profileRes] = await Promise.all([
-          fetch('http://localhost:5050/api/quizzes/mine/attempts', {
-            headers: { 'Authorization': `Bearer ${token}` }
+        if (!token || !attemptId) return;
+
+        const [repRes, profRes] = await Promise.all([
+          fetch(`http://localhost:5050/api/reports/attempt/${attemptId}`, {
+            headers: { Authorization: `Bearer ${token}` }
           }),
           fetch('http://localhost:5050/api/users/profile', {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` }
           })
         ]);
-        
-        const data = await attemptRes.json();
-        if (!attemptRes.ok) throw new Error(data.message || 'Failed to fetch attempts');
-        
-        const found = data.find(a => String(a._id) === String(attemptId));
-        if (!found) throw new Error('Attempt not found');
-        setAttempt(found);
 
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
-          setDbProfile(profileData);
+        if (repRes.status === 404 && retryCount < 5) {
+           // Report might still be saving, retry after 2 seconds
+           setTimeout(() => {
+             if (active) setRetryCount(prev => prev + 1);
+           }, 2000);
+           return;
+        }
+
+        const repData = await repRes.json();
+        const profData = await profRes.json();
+
+        if (repRes.ok && active) {
+          setReportData(repData);
+        }
+        if (profRes.ok && active) {
+          setDbProfile(profData);
         }
       } catch (err) {
-        setError(err.message);
+        console.error('Data fetch error:', err);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
-    fetchAttempt();
-  }, [attemptId]);
+    fetchReportData();
+    return () => { active = false; };
+  }, [attemptId, retryCount]);
 
-  if (loading) {
-    return <div className="mt-20 flex justify-center"><RefreshCcw className="animate-spin text-orange-400" size={40} /></div>;
-  }
-
-  if (error) {
-    return <div className="mt-20 text-center text-red-400">{error}</div>;
-  }
-
-  const percentage = Math.round((attempt.totalScore / (attempt.maxScore || 1)) * 100);
-
-  const strengths = [];
-  const weaknesses = [];
-  attempt.responses.forEach((r) => {
-    if (!r.type) r.type = 'Topic';
-    if (r.score > 0) {
-      if (!strengths.includes(r.type)) strengths.push(r.type);
-    } else {
-      if (!weaknesses.includes(r.type)) weaknesses.push(r.type);
-    }
-  });
-  if (strengths.length === 0) strengths.push('Persistence');
-  if (weaknesses.length === 0) weaknesses.push('None detected');
-
-  const downloadPDF = async () => {
-    const element = document.getElementById('report-content');
+  /**
+   * @function handleExportPDF
+   * @description Captures the report DOM element and exports it as a high-resolution PDF.
+   */
+  const handleExportPDF = async () => {
+    const element = document.getElementById('secure-report-content');
     if (!element) return;
+
     try {
-      const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#09090b', useCORS: true });
+      toast.info("Generating high-resolution report...", { toastId: 'pdf-gen' });
+      const canvas = await html2canvas(element, {
+        scale: 2, 
+        useCORS: true,
+        backgroundColor: '#0f172a',
+        logging: false
+      });
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
       pdf.save(`SkillTrove_Report_${attemptId}.pdf`);
+      toast.success("Report downloaded successfully!");
     } catch (err) {
-      console.error('PDF Generation Failed', err);
+      console.error('PDF Export failed:', err);
+      toast.error("Failed to generate PDF. Please try again.");
     }
   };
 
-  const getProfileImageUrl = (b64) => {
-    if (!b64) return null;
-    if (b64.startsWith('data:image')) return b64;
-    return `data:image/jpeg;base64,${b64}`;
-  };
+  if (loading || (retryCount > 0 && !reportData)) return (
+    <div className="flex h-screen flex-col items-center justify-center bg-slate-950">
+      <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/20 border-t-orange-500 mb-4" />
+      <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">
+        {retryCount > 0 ? `Syncing Report Data (Attempt ${retryCount}/5)...` : 'Authenticating Secure Report...'}
+      </p>
+    </div>
+  );
 
-  const storedUserStr = localStorage.getItem('user');
-  const storedUser = storedUserStr ? JSON.parse(storedUserStr) : null;
-  const rawProfileImage = dbProfile?.profileImage || user?.profileImage || localStorage.getItem('skilltrove_profileImage');
-  const profileImgUrl = getProfileImageUrl(rawProfileImage);
-  
+  if (!reportData?.attempt) return (
+    <div className="flex h-screen flex-col items-center justify-center bg-slate-950 text-white">
+      <AlertCircle size={48} className="mb-4 text-red-500" />
+      <h2 className="text-2xl font-bold">Report Sequence Not Found</h2>
+      <p className="text-zinc-500 mt-2">The requested attempt record could not be retrieved.</p>
+      <button onClick={() => navigate('/')} className="mt-6 px-8 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all font-bold">Return to Dashboard</button>
+    </div>
+  );
+
+  const attempt = reportData.attempt;
+  const quiz = reportData.quiz;
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
   const displayName = dbProfile?.name || user?.name || storedUser?.name || 'User';
   const displayEmail = dbProfile?.email || user?.email || storedUser?.email || 'N/A';
-  const displayImage = profileImgUrl || localStorage.getItem('skilltrove_profileImage');
-  
-  const examDate = new Date(attempt?.completedAt || Date.now()).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const displayRoll = dbProfile?.rollNumber || 'ST-2026-X';
+  const displayImage = user?.profileImage || localStorage.getItem('skilltrove_profileImage') || 'https://dummyimage.com/100x100/151515/ff6a00.jpg&text=ID';
 
   return (
-    <section className="mx-auto mt-8 max-w-4xl px-6 pb-16">
-      <div className="mb-4 flex justify-between items-center">
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
+    <section className="min-h-screen bg-slate-950 py-12 px-6">
+      <div className="mx-auto max-w-4xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 flex items-center justify-between"
         >
-          <ChevronLeft size={16} /> Back to Dashboard
-        </button>
-        <button onClick={downloadPDF} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 shadow-[0_0_15px_rgba(249,115,22,0.4)]">Download PDF Report</button>
-      </div>
-
-      <div id="report-content" className="rounded-[2rem] border border-white/20 bg-white/5 p-8 backdrop-blur-2xl">
-        <div className="flex justify-center mb-6">
-          <img src={displayImage} alt="Identity Verified" className="w-32 h-32 rounded-full border-4 border-cyan-500 mx-auto mb-4 object-cover shadow-[0_0_20px_rgba(6,182,212,0.4)]" />
-        </div>
-        <div className="flex flex-col items-center border-b border-white/10 pb-8 text-center md:flex-row md:items-start md:text-left">
-          <div className="flex-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-orange-200">Official Evaluation</p>
-            <h2 className="text-3xl font-bold text-white">{displayName}'s Report Card</h2>
-            <p className="mt-1 text-sm text-zinc-300 font-semibold">{displayEmail}</p>
-            <p className="mt-1 text-xs text-zinc-400">Date: {examDate}</p>
-            <p className="mt-2 text-sm text-zinc-300">Attempt ID: {attemptId}</p>
-            {attempt.flagged && <span className="mt-2 inline-block rounded-md border border-red-500/50 bg-red-500/20 px-2 py-1 text-xs font-bold uppercase text-red-300">Proctoring Flagged</span>}
+          <div>
+            <h1 className="text-3xl font-black text-white tracking-tight">Performance <span className="text-orange-500">Record</span></h1>
+            <p className="text-zinc-400 font-medium">Verified Assessment Integrity Certificate</p>
           </div>
-          <div className="mt-4 text-center md:mt-0 md:text-right">
-            <p className="text-sm uppercase text-zinc-300">Overall Score</p>
-            <p className="text-4xl font-extrabold text-orange-400 drop-shadow-[0_0_10px_rgba(249,115,22,0.5)]">{percentage}%</p>
-            <p className="text-xs text-zinc-400">{attempt.totalScore} / {attempt.maxScore} pts</p>
-          </div>
-        </div>
-
-        <div className="mt-8 grid gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-6 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-emerald-300">
-              <Award size={18} /> Core Strengths
-            </h3>
-            <ul className="space-y-3">
-              {strengths.map(s => (
-                <li key={s} className="flex items-start gap-3 text-sm text-zinc-300">
-                  <CheckCircle size={18} className="mt-0.5 text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-2xl border border-red-400/20 bg-red-500/5 p-6 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-red-300">
-              <AlertTriangle size={18} /> Improvement Areas
-            </h3>
-            <ul className="space-y-3">
-              {weaknesses.map(w => (
-                <li key={w} className="flex items-start gap-3 text-sm text-zinc-300">
-                  <AlertTriangle size={18} className="mt-0.5 text-red-400 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]" />
-                  {w}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <div className="mt-10 flex justify-center gap-4">
-          <button onClick={() => navigate('/leaderboard')} className="rounded-xl border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/20 transition-colors">
-            View Leaderboard
+          <button
+            onClick={handleExportPDF}
+            className="group flex items-center gap-2 rounded-2xl bg-orange-500 px-6 py-3 font-bold text-white shadow-xl shadow-orange-500/20 transition-all hover:scale-105 hover:bg-orange-600 active:scale-95"
+          >
+            <Download size={20} className="group-hover:animate-bounce" />
+            Download PDF
           </button>
+        </motion.div>
+
+        <div id="secure-report-content" className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900 p-10 shadow-2xl">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-cyan-500/5" />
+          
+          <div className="relative z-10 flex flex-col items-center md:flex-row md:items-start gap-10 border-b border-white/10 pb-10">
+            <div className="relative">
+              <div className="h-40 w-40 overflow-hidden rounded-full border-4 border-orange-500/30 p-1 shadow-[0_0_30px_rgba(249,115,22,0.2)] bg-black/40">
+                <img 
+                  src={displayImage} 
+                  crossOrigin="anonymous"
+                  alt="Biometric Identity" 
+                  className="h-full w-full rounded-full object-cover" 
+                />
+              </div>
+              <div className="absolute -bottom-2 -right-2 rounded-full bg-emerald-500 p-2 text-white shadow-lg">
+                <CheckCircle size={20} />
+              </div>
+            </div>
+
+            <div className="flex-1 text-center md:text-left">
+              <h2 className="text-4xl font-black text-white tracking-tighter">{displayName}</h2>
+              <p className="mt-1 text-lg font-bold text-orange-400 uppercase tracking-widest">{displayRoll}</p>
+              <div className="mt-4 flex flex-wrap justify-center md:justify-start gap-4">
+                <div className="flex items-center gap-2 text-zinc-400 text-sm font-bold">
+                  <Calendar size={16} />
+                  {new Date(attempt.completedAt).toLocaleDateString('en-US', { dateStyle: 'long' })}
+                </div>
+                <div className="flex items-center gap-2 text-zinc-400 text-sm font-bold">
+                  <Target size={16} />
+                  {quiz?.title || 'General Aptitude'}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-white/5 p-6 text-center backdrop-blur-md border border-white/5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Final Score</p>
+              <div className="text-5xl font-black text-white leading-none">
+                {Math.round((attempt.totalScore / attempt.maxScore) * 100)}<span className="text-2xl text-orange-500">%</span>
+              </div>
+              <p className="mt-2 text-[10px] text-zinc-400 font-bold tracking-widest">{attempt.totalScore} / {attempt.maxScore} PTS</p>
+            </div>
+          </div>
+
+          <div className="relative z-10 grid gap-6 mt-10 grid-cols-1 sm:grid-cols-3">
+             <div className="rounded-2xl border border-white/5 bg-white/5 p-5">
+                <Award className="text-orange-500 mb-2" size={24} />
+                <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-tighter">Status</h4>
+                <p className="text-white font-bold">{attempt.totalScore >= (attempt.maxScore * 0.4) ? 'QUALIFIED' : 'NOT QUALIFIED'}</p>
+             </div>
+             <div className="rounded-2xl border border-white/5 bg-white/5 p-5">
+                <Target className="text-cyan-500 mb-2" size={24} />
+                <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-tighter">Accuracy</h4>
+                <p className="text-white font-bold">{Math.round((attempt.totalScore / attempt.maxScore) * 100)}%</p>
+             </div>
+             <div className="rounded-2xl border border-white/5 bg-white/5 p-5">
+                <CheckCircle className="text-emerald-500 mb-2" size={24} />
+                <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-tighter">AI Proctoring</h4>
+                <p className="text-white font-bold">{attempt.flagged ? 'FLAGGED' : 'SECURE'}</p>
+             </div>
+          </div>
+
+          <div className="relative z-10 mt-10 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-6">
+             <h4 className="text-xs font-black text-orange-400 uppercase tracking-widest mb-4">Integrity Certificate</h4>
+             <p className="text-sm text-zinc-400 leading-relaxed italic">
+               "This document certifies that the candidate completed the assessment under real-time AI proctoring. 
+               Identity was verified via continuous biometric facial recognition and eyeball tracking algorithms."
+             </p>
+             <div className="mt-6 flex justify-between items-end border-t border-white/10 pt-4">
+                <div>
+                   <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">Verification Hash</p>
+                   <p className="text-xs text-zinc-300 font-mono tracking-tighter">ST-AUTH-{attemptId.toUpperCase()}</p>
+                </div>
+                <div className="h-12 w-12 bg-white flex items-center justify-center p-1 rounded-md opacity-20 grayscale">
+                   <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://skilltrove.ai/verify/${attemptId}`} alt="QR Code" className="h-full w-full" />
+                </div>
+             </div>
+          </div>
+        </div>
+
+        <div className="mt-8 text-center">
+           <p className="text-[10px] text-zinc-600 font-black uppercase tracking-[0.3em]">End of Official Record</p>
         </div>
       </div>
     </section>

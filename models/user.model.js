@@ -43,6 +43,8 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
     roll: { type: String, trim: true, sparse: true },
+    isVerified: { type: Boolean, default: false },
+    verificationToken: { type: String, select: false },
   },
   { timestamps: true },
 );

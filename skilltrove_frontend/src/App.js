@@ -26,6 +26,8 @@ import NotificationCenter from './components/NotificationCenter';
 import FacultyDashboard from './pages/FacultyDashboard';
 import FacultyHome from './pages/FacultyHome';
 import FacultyRoute from './components/FacultyRoute';
+import Home from './pages/Home';
+
 
 function Scene() {
   const { theme } = useTheme();
@@ -112,7 +114,7 @@ function Scene() {
                     {user?.role === 'faculty' ? (
                       <FacultyHome />
                     ) : (
-                      <HeroSection normalized={normalized} mouse={mouse} onStartCheck={() => navigate('/check')} />
+                      <Home normalized={normalized} mouse={mouse} />
                     )}
                   </PrivateRoute>
                 }

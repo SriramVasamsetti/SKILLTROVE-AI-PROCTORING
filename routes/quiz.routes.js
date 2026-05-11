@@ -4,26 +4,35 @@ const ctrl = require('../controllers/quiz.controller');
 
 const router = express.Router();
 
-router.get('/', ctrl.listQuizzes);
+/** 
+ * PUBLIC / AUTHENTICATED ROUTES 
+ */
+router.get('/', authMiddleware(true), ctrl.listQuizzes);
+router.get('/mine/attempts', authMiddleware(true), ctrl.listMyAttempts);
+router.post('/:id/submit', authMiddleware(true), ctrl.submitQuiz);
+router.get('/:id', authMiddleware(false), ctrl.getQuiz);
 
-/** TEMP: public for deadline testing — re-protect with auth before production */
-router.post('/generate', ctrl.generateAiQuiz);
+/**
+ * AI GENERATION (Shared for Practice and Faculty Assignment)
+ * Logic inside controller handles "assignedBy" logic based on role.
+ */
+router.post('/generate', authMiddleware(true), ctrl.generateAiQuiz);
 
+/**
+ * FACULTY-ONLY COMMANDS (RBAC LOCKED)
+ */
 router.post(
-  '/ai/generate',
-  authMiddleware(true),
-  requireRoles('faculty', 'admin', 'student'),
-  ctrl.generateAiQuiz,
+  '/manual', 
+  authMiddleware(true), 
+  requireRoles('faculty', 'admin'), 
+  ctrl.createManualQuiz
 );
 
-router.post('/manual', authMiddleware(true), requireRoles('faculty', 'admin'), ctrl.createManualQuiz);
-
-router.get('/mine/attempts', authMiddleware(true), ctrl.listMyAttempts);
-
-router.patch('/:id/archive', authMiddleware(true), ctrl.archiveQuiz);
-router.post('/:id/submit', authMiddleware(true), ctrl.submitQuiz);
-
-/** Declare parametric GET last — avoids treating "manual" / "mine" segments as Mongo ids */
-router.get('/:id', authMiddleware(false), ctrl.getQuiz);
+router.patch(
+  '/:id/archive', 
+  authMiddleware(true), 
+  requireRoles('faculty', 'admin'), 
+  ctrl.archiveQuiz
+);
 
 module.exports = router;
