@@ -33,9 +33,12 @@ const app = express();
 const server = http.createServer(app);
 
 app.use(helmet());
-app.use(
+aapp.use(
   cors({
-    origin: 'http://localhost:3000',
+    origin: [
+      'http://localhost:3000',
+      'https://gregarious-zabaione-f9f296.netlify.app'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
