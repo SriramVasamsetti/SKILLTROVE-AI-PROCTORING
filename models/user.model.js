@@ -45,6 +45,43 @@ const userSchema = new mongoose.Schema(
     roll: { type: String, trim: true, sparse: true },
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, select: false },
+
+    // ── Learning Path & Personalisation (Future Scope foundation) ──
+    /** Preferred language for i18n support */
+    preferredLanguage: { type: String, default: 'en' },
+
+    /** Learning path — ordered list of topic slugs the user is following */
+    learningPath: {
+      type: [
+        {
+          topic: { type: String, required: true },
+          bloomTarget: {
+            type: String,
+            enum: ['Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create'],
+            default: 'Understand',
+          },
+          completedAt: { type: Date },
+          status: {
+            type: String,
+            enum: ['pending', 'in-progress', 'completed'],
+            default: 'pending',
+          },
+        },
+      ],
+      default: [],
+    },
+
+    /** Aggregated performance snapshot — feeds AI recommendation engine */
+    performanceSummary: {
+      averageScore: { type: Number, default: 0 },
+      totalAttempts: { type: Number, default: 0 },
+      strongTopics: { type: [String], default: [] },
+      weakTopics: { type: [String], default: [] },
+      lastUpdated: { type: Date },
+    },
+
+    /** PWA / mobile push notification subscription payload */
+    pushSubscription: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );
