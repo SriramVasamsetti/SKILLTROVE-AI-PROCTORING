@@ -1,116 +1,137 @@
-const { asyncHandler } = require('../middleware/asyncHandler');
-const { getHeatmapForUser, leaderboardTop, rebuildLeaderboardRanks } = require('../utils/analyticsAggregator');
-const QuizAttempt = require('../models/quizAttempt.model');
+const Analytics = require('../models/analytics.model');
 const User = require('../models/user.model');
-const ProctorLog = require('../models/proctoring.model');
+const QuizAttempt = require('../models/quizAttempt.model');
 
-async function myHeatmap(req, res) {
-  const rows = await getHeatmapForUser(req.user.userId);
+function startOfUtcDay(date) {
+  const d = new Date(date);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
 
-  /** Also compute streak info from QuizAttempt timestamps (real-time view of quiz history) */
-  const recent = await QuizAttempt.find({
-    userId: req.user.userId,
-    completedAt: { $exists: true },
-  })
+async function ensureAnalyticsDoc(userId) {
+  let doc = await Analytics.findOne({ userId });
+  if (!doc) doc = await Analytics.create({ userId, heatmapDaily: [], scores: [], leaderboard: [] });
+  return doc;
+}
+
+async function bumpHeatmap(userId, at = new Date()) {
+  const day = startOfUtcDay(at);
+  const doc = await ensureAnalyticsDoc(userId);
+  const idx = doc.heatmapDaily.findIndex((h) => startOfUtcDay(h.date).getTime() === day.getTime());
+  if (idx === -1) doc.heatmapDaily.push({ date: day, quizzesCompleted: 1 });
+  else doc.heatmapDaily[idx].quizzesCompleted += 1;
+  await doc.save();
+}
+
+async function pushScoreEntry(userId, entry) {
+  const doc = await ensureAnalyticsDoc(userId);
+  doc.scores.push(entry);
+  if (doc.scores.length > 200) doc.scores.splice(0, doc.scores.length - 200);
+  await doc.save();
+}
+
+async function rebuildLeaderboardRanks(subject = null) {
+  const pipeline =
+    subject == null
+      ? [
+          { $match: { completedAt: { $exists: true, $ne: null } } },
+          { $group: { _id: '$userId', avgPct: { $avg: { $cond: [{ $eq: ['$maxScore', 0] }, 0, { $divide: ['$totalScore', '$maxScore'] }] } }, attempts: { $sum: 1 } } },
+          { $sort: { avgPct: -1 } },
+        ]
+      : [
+          { $lookup: { from: 'quizzes', localField: 'quizId', foreignField: '_id', as: 'q' } },
+          { $unwind: '$q' },
+          { $match: { completedAt: { $exists: true, $ne: null }, 'q.subject': subject } },
+          { $group: { _id: '$userId', avgPct: { $avg: { $cond: [{ $eq: ['$maxScore', 0] }, 0, { $divide: ['$totalScore', '$maxScore'] }] } }, attempts: { $sum: 1 } } },
+          { $sort: { avgPct: -1 } },
+        ];
+
+  const leaderboard = await QuizAttempt.aggregate(pipeline);
+  let rank = 1;
+  for (const row of leaderboard) {
+    const doc = await ensureAnalyticsDoc(row._id);
+    doc.leaderboard.push({ scope: subject ? 'subject' : 'global', subject: subject ?? undefined, rank, totalParticipants: leaderboard.length, at: new Date() });
+    if (doc.leaderboard.length > 60) doc.leaderboard.splice(0, doc.leaderboard.length - 60);
+    await doc.save();
+    rank += 1;
+  }
+  return leaderboard;
+}
+
+async function getHeatmapForUser(userId) {
+  const doc = await Analytics.findOne({ userId });
+  if (!doc) return [];
+  return doc.heatmapDaily.map((h) => ({ date: h.date.toISOString().slice(0, 10), quizzesCompleted: h.quizzesCompleted }));
+}
+
+async function leaderboardTop(limit = 20, subject = null) {
+  const pipeline =
+    subject == null
+      ? [
+          { $match: { completedAt: { $exists: true, $ne: null } } },
+          { $group: { _id: '$userId', avgPct: { $avg: { $cond: [{ $eq: ['$maxScore', 0] }, 0, { $divide: ['$totalScore', '$maxScore'] }] } }, attempts: { $sum: 1 }, lastAttempt: { $max: '$completedAt' } } },
+          { $sort: { avgPct: -1 } },
+          { $limit: limit },
+        ]
+      : [
+          { $lookup: { from: 'quizzes', localField: 'quizId', foreignField: '_id', as: 'q' } },
+          { $unwind: '$q' },
+          { $match: { completedAt: { $exists: true, $ne: null }, 'q.subject': subject } },
+          { $group: { _id: '$userId', avgPct: { $avg: { $cond: [{ $eq: ['$maxScore', 0] }, 0, { $divide: ['$totalScore', '$maxScore'] }] } }, attempts: { $sum: 1 }, lastAttempt: { $max: '$completedAt' } } },
+          { $sort: { avgPct: -1 } },
+          { $limit: limit },
+        ];
+
+  const rows = await QuizAttempt.aggregate(pipeline);
+  const userIds = rows.map((r) => r._id);
+  const users = await User.find({ _id: { $in: userIds } }).select('name email role').lean();
+  const byId = new Map(users.map((u) => [String(u._id), u]));
+  return rows.map((r, idx) => ({ rank: idx + 1, avgPct: r.avgPct, attempts: r.attempts, lastAttempt: r.lastAttempt, user: byId.get(String(r._id)) ?? { _id: r._id } }));
+}
+
+/**
+ * @function getPersonalisedRecommendations
+ * @description Analyses weak topics from quiz history and recommends next Bloom level.
+ * Future scope: feeds mobile app and AI learning assistant.
+ */
+async function getPersonalisedRecommendations(userId) {
+  const attempts = await QuizAttempt.find({ userId, completedAt: { $exists: true } })
     .sort({ completedAt: -1 })
-    .limit(60)
-    .select('completedAt totalScore maxScore')
+    .limit(20)
     .lean();
 
-  const byDay = new Map(rows.map((r) => [r.date, r.quizzesCompleted]));
-  const derived = {};
+  const topicStats = {};
+  for (const attempt of attempts) {
+    const subject = attempt.subject || 'General';
+    if (!topicStats[subject]) topicStats[subject] = { total: 0, score: 0 };
+    topicStats[subject].total += attempt.maxScore || 0;
+    topicStats[subject].score += attempt.totalScore || 0;
+  }
 
-  recent.forEach((r) => {
-    const day = new Date(r.completedAt).toISOString().slice(0, 10);
-    derived[day] = (derived[day] || 0) + 1;
+  const BLOOM_PROGRESSION = ['Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create'];
+
+  const recommendations = Object.entries(topicStats).map(([topic, stat]) => {
+    const pct = stat.total > 0 ? stat.score / stat.total : 0;
+    const bloomIndex = pct >= 0.8 ? 2 : pct >= 0.6 ? 1 : 0;
+    return {
+      topic,
+      accuracyPct: Math.round(pct * 100),
+      recommendedBloomLevel: BLOOM_PROGRESSION[bloomIndex],
+      priority: pct < 0.6 ? 'high' : pct < 0.8 ? 'medium' : 'low',
+    };
   });
 
-  const mergedDates = Array.from(new Set([...byDay.keys(), ...Object.keys(derived)])).sort();
-  const heatmapMerged = mergedDates.map((date) => ({
-    date,
-    quizzesCompleted: Math.max(byDay.get(date) || 0, derived[date] || 0),
-  }));
-
-  res.json({ rollup: rows, realtimeFromAttempts: derived, merged: heatmapMerged });
-}
-
-async function leaderboard(req, res) {
-  const top = parseInt(req.query.limit, 10);
-  const { subject } = req.query;
-  const board = await leaderboardTop(Number.isFinite(top) ? top : 20, subject || null);
-  res.json(board);
-}
-
-async function refreshLeaderboard(req, res) {
-  if (!['faculty', 'admin'].includes(req.user.role)) return res.status(403).json({ message: 'Forbidden' });
-  const { subject } = req.body;
-  const rows = await rebuildLeaderboardRanks(subject ?? null);
-  res.json({ updated: rows.length });
-}
-
-async function quizHistory(req, res) {
-  const items = await QuizAttempt.find({
-    userId: req.user.userId,
-    completedAt: { $exists: true },
-  })
-    .sort({ completedAt: -1 })
-    .populate('quizId', 'subject')
-    .lean();
-
-  res.json(
-    items.map((a) => ({
-      id: a._id,
-      completedAt: a.completedAt,
-      totalScore: a.totalScore,
-      maxScore: a.maxScore,
-      subject: a.quizId?.subject,
-      flagged: a.flagged,
-    })),
+  return recommendations.sort((a, b) =>
+    (a.priority === 'high' ? 0 : a.priority === 'medium' ? 1 : 2) -
+    (b.priority === 'high' ? 0 : b.priority === 'medium' ? 1 : 2)
   );
 }
 
-async function getFacultyStudentAnalytics(req, res) {
-  if (!['faculty', 'admin'].includes(req.user.role)) {
-    return res.status(403).json({ message: 'Forbidden' });
-  }
-
-  const users = await User.find({ role: 'student' }).select('name email roll').lean();
-  const analytics = await Promise.all(users.map(async (u) => {
-    const attempts = await QuizAttempt.find({ userId: u._id }).lean();
-    const totalScore = attempts.reduce((acc, curr) => acc + (curr.totalScore || 0), 0);
-    const maxScore = attempts.reduce((acc, curr) => acc + (curr.maxScore || 0), 0);
-    const accuracy = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-
-    const proctorLogs = await ProctorLog.find({ userId: u._id }).lean();
-    
-    // Count events that are strikes (denied access or custom flags)
-    const strikeEvents = proctorLogs.flatMap(log => 
-      (log.events || []).filter(e => 
-        (e.type === 'webcam-status' && (e.value === false || e.value?.allowed === false)) ||
-        String(e.message || '').toLowerCase().includes('strike')
-      )
-    );
-
-    return {
-      userId: u._id,
-      name: u.name,
-      roll: u.roll || 'N/A',
-      accuracy,
-      strikes: strikeEvents.length,
-      strikeHistory: strikeEvents.map(e => ({
-        date: e.at,
-        message: e.message || 'Proctoring Strike Detected'
-      }))
-    };
-  }));
-
-  res.json(analytics);
-}
-
 module.exports = {
-  myHeatmap: asyncHandler(myHeatmap),
-  leaderboard: asyncHandler(leaderboard),
-  refreshLeaderboard: asyncHandler(refreshLeaderboard),
-  quizHistory: asyncHandler(quizHistory),
-  getFacultyStudentAnalytics: asyncHandler(getFacultyStudentAnalytics),
+  bumpHeatmap,
+  pushScoreEntry,
+  rebuildLeaderboardRanks,
+  getHeatmapForUser,
+  leaderboardTop,
+  startOfUtcDay,
+  getPersonalisedRecommendations,
 };
