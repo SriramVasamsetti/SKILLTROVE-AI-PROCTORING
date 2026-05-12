@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
  */
 const getTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.error('[SMTP Warning] EMAIL_USER or EMAIL_PASS environment variables are missing. Emails will not be sent.');
+    console.warn('[SMTP Warning] EMAIL_USER or EMAIL_PASS environment variables are missing. Emails will not be sent.');
     return null;
   }
 
@@ -22,48 +22,48 @@ const getTransporter = () => {
 
 /**
  * @function sendVerificationEmail
- * @description Sends a professional HTML email with the SkillTrove brand identity.
+ * @description Sends a professional HTML email with the 6-digit OTP for account activation.
  * @param {string} toEmail - Recipient email address.
- * @param {string} verificationLink - Complete URL for account activation.
+ * @param {string} otp - 6-digit verification code.
  */
-async function sendVerificationEmail(toEmail, verificationLink) {
+async function sendVerificationEmail(toEmail, otp) {
   const transporter = getTransporter();
   if (!transporter) return;
 
   const mailOptions = {
     from: `"SkillTrove Security" <${process.env.EMAIL_USER}>`,
     to: toEmail,
-    subject: 'Action Required: Activate Your SkillTrove Identity',
+    subject: 'SkillTrove: Your 6-Digit Verification Code',
     html: `
-      <div style="font-family: 'Inter', -apple-system, sans-serif; max-width: 600px; margin: auto; padding: 40px; border-radius: 24px; background-color: #ffffff; border: 1px solid #eef2f6;">
-        <div style="text-align: center; margin-bottom: 32px;">
-           <div style="display: inline-block; background-color: #f97316; padding: 12px; border-radius: 14px; margin-bottom: 12px;">
-              <span style="color: white; font-weight: 900; font-style: italic; font-size: 24px;">ST</span>
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: auto; padding: 40px; border-radius: 30px; background-color: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 30px;">
+           <div style="display: inline-block; background: linear-gradient(135deg, #f97316, #facc15); padding: 15px; border-radius: 18px; margin-bottom: 10px;">
+              <span style="color: #0f172a; font-weight: 900; font-style: italic; font-size: 28px;">ST</span>
            </div>
-           <h1 style="color: #0f172a; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">SKILL<span style="color: #f97316;">TROVE</span></h1>
-           <p style="color: #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px; font-weight: 700;">AI Proctoring Excellence</p>
+           <h1 style="color: #ffffff; margin: 0; font-size: 32px; font-weight: 900; letter-spacing: -1.5px;">SKILL<span style="color: #f97316;">TROVE</span></h1>
+           <p style="color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 4px; margin-top: 6px; font-weight: 800;">AI Proctoring Excellence</p>
         </div>
         
-        <h2 style="color: #1e293b; font-size: 20px; font-weight: 700; margin-bottom: 16px;">Finalize your registration</h2>
-        <p style="color: #475569; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-          To ensure the integrity of the SkillTrove assessment environment, please verify your email address to activate your biometric profile.
-        </p>
-        
-        <div style="text-align: center; margin: 40px 0;">
-          <a href="${verificationLink}" style="background-color: #f97316; color: #ffffff; padding: 16px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 16px; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);">
-            Verify Account
-          </a>
+        <div style="background: rgba(255,255,255,0.03); border-radius: 24px; padding: 30px; border: 1px solid rgba(255,255,255,0.05);">
+          <h2 style="color: #f8fafc; font-size: 22px; font-weight: 800; margin-bottom: 15px; text-align: center;">Verify Your Identity</h2>
+          <p style="color: #94a3b8; font-size: 15px; line-height: 1.6; margin-bottom: 30px; text-align: center;">
+            To complete your biometric profile registration and access the SkillTrove environment, please enter the following 6-digit activation code.
+          </p>
+          
+          <div style="text-align: center; margin: 40px 0;">
+            <div style="display: inline-block; background: #f97316; color: #ffffff; padding: 20px 40px; border-radius: 20px; font-weight: 900; font-size: 42px; letter-spacing: 12px; box-shadow: 0 10px 30px rgba(249, 115, 22, 0.3);">
+              ${otp}
+            </div>
+          </div>
+          
+          <p style="color: #64748b; font-size: 13px; text-align: center; margin-top: 20px;">
+            This code expires in 10 minutes. If you did not request this code, please ignore this email.
+          </p>
         </div>
         
-        <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; text-align: center;">
-          If the button doesn't work, copy and paste this link into your browser:<br/>
-          <a href="${verificationLink}" style="color: #f97316; text-decoration: none;">${verificationLink}</a>
-        </p>
-        
-        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 32px 0;"/>
-        
-        <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-          &copy; 2026 SkillTrove AI. This is a security-critical communication.
+        <p style="color: #475569; font-size: 12px; line-height: 1.6; text-align: center; margin-top: 40px;">
+          &copy; 2026 SkillTrove AI Systems. Powered by Advanced Biometrics.<br/>
+          Securing the future of academic integrity.
         </p>
       </div>
     `
@@ -71,7 +71,7 @@ async function sendVerificationEmail(toEmail, verificationLink) {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log(`[Email] Verification dispatched to ${toEmail}: ${info.messageId}`);
+    console.log(`[Email] OTP ${otp} dispatched to ${toEmail}: ${info.messageId}`);
   } catch (error) {
     console.error(`[Email Error] Failed to send to ${toEmail}:`, error.message);
   }

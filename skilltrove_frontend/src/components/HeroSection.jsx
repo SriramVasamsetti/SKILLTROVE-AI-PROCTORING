@@ -95,7 +95,7 @@ export default function HeroSection({ normalized, onStartCheck }) {
           }}
         />
 
-        <div className="relative z-10 text-center" style={{ transform: 'translateZ(50px)' }}>
+        <div className="relative z-10 text-center" style={{ transform: 'translate3d(0px, 0px, 50px)' }}>
           <p className="inline-flex rounded-full border border-cyan-400/50 bg-cyan-500/10 px-4 py-1 text-xs uppercase tracking-[0.3em] text-cyan-200">
             Welcome to the future of exams
           </p>
@@ -117,7 +117,8 @@ export default function HeroSection({ normalized, onStartCheck }) {
           >
             Get Started
           </motion.button>
-        <div className="relative z-10 mt-16 grid grid-cols-1 md:grid-cols-3 gap-6" style={{ transform: 'translateZ(30px)' }}>
+        </div>
+        <div className="relative z-10 mt-16 grid grid-cols-1 md:grid-cols-3 gap-6" style={{ transform: 'translate3d(0px, 0px, 30px)' }}>
           {[
             { label: 'Total Assessments', value: '24,000+' },
             { label: 'Verified Identities', value: '99.9%' },
@@ -130,7 +131,7 @@ export default function HeroSection({ normalized, onStartCheck }) {
           ))}
         </div>
 
-        <div className="relative z-10 mt-20" style={{ transform: 'translateZ(20px)' }}>
+        <div className="relative z-10 mt-20" style={{ transform: 'translate3d(0px, 0px, 20px)' }}>
           <h2 className="mb-8 text-center text-2xl font-bold uppercase tracking-[0.15em] text-white">How It Works</h2>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-center">
             {TIMELINE.map((item, idx) => {
@@ -250,7 +251,6 @@ export default function HeroSection({ normalized, onStartCheck }) {
               />
             </div>
           )}
-        </div>
       </motion.div>
       
       <footer className="mt-16 border-t border-white/10 pt-8 pb-4 text-center">

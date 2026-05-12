@@ -4,6 +4,7 @@ import * as faceapi from 'face-api.js';
 import { useNavigate } from 'react-router-dom';
 import { LoaderCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/axios';
 
 async function loadFaceModels() {
   await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
@@ -63,33 +64,13 @@ export default function Login() {
     setBusy(true);
     setMsg('');
     try {
-      const res = await fetch('http://localhost:5050/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email, password, faceDescriptor: descriptor }),
+      const res = await api.post('/auth/login', {
+        email,
+        password,
+        faceDescriptor: descriptor
       });
       
-      let data;
-      const text = await res.text();
-      try {
-        data = JSON.parse(text);
-      } catch (err) {
-        console.error('Non-JSON response:', text);
-        throw new Error('Server returned HTML instead of JSON. Check console.');
-      }
-
-      if (!res.ok) {
-        if (data?.code === 'EMAIL_UNVERIFIED') {
-          setMsg(
-            <span>
-              Account not verified. <button onClick={() => navigate('/verify-email', { state: { email } })} className="text-orange-400 font-bold hover:underline">Click here to verify</button>
-            </span>
-          );
-          return;
-        }
-        throw new Error(data?.message || 'Login failed');
-      }
+      const data = res.data;
       login(data.token);
       if (data.user.role === 'faculty') {
         navigate('/faculty-dashboard');
@@ -97,7 +78,15 @@ export default function Login() {
         navigate('/');
       }
     } catch (e) {
-      setMsg(e.message);
+      if (e.response?.data?.code === 'EMAIL_UNVERIFIED') {
+        setMsg(
+          <span>
+            Account not verified. <button onClick={() => navigate('/verify-email', { state: { email } })} className="text-orange-400 font-bold hover:underline">Click here to verify</button>
+          </span>
+        );
+      } else {
+        setMsg(e.response?.data?.message || e.message);
+      }
     } finally {
       setBusy(false);
     }
@@ -131,7 +120,7 @@ export default function Login() {
             )}
           </motion.button>
         </div>
-        {msg && <p className="mt-3 text-sm text-red-300">{msg}</p>}
+        {msg && <div className="mt-3 text-sm text-red-300">{msg}</div>}
       </div>
     </section>
   );

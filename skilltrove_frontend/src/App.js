@@ -43,7 +43,8 @@ function Scene() {
 
   const particleStyle = useMemo(
     () => ({
-      transform: `translate3d(${offset.x * 2}px, ${offset.y * 2}px, 0px)`,
+      translateX: offset.x * 2,
+      translateY: offset.y * 2,
     }),
     [offset.x, offset.y],
   );
@@ -169,7 +170,7 @@ function Scene() {
               <Route path="/report/:attemptId" element={<PrivateRoute><ReportCard /></PrivateRoute>} />
               <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
               <Route path="/about" element={<PrivateRoute><About /></PrivateRoute>} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
+
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
 

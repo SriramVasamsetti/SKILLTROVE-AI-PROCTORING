@@ -4,6 +4,7 @@ import * as faceapi from 'face-api.js';
 import { useNavigate } from 'react-router-dom';
 import { LoaderCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/axios';
 
 async function loadFaceModels() {
   await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
@@ -75,30 +76,22 @@ export default function Signup() {
     setBusy(true);
     setMsg('');
     try {
-      const res = await fetch('http://localhost:5050/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ ...form, faceDescriptor: descriptor }),
+      const res = await api.post('/auth/signup', {
+        ...form,
+        faceDescriptor: descriptor
       });
       
-      let data;
-      const text = await res.text();
-      try {
-        data = JSON.parse(text);
-      } catch (err) {
-        console.error('Non-JSON response:', text);
-        throw new Error('Server returned HTML instead of JSON. Check console.');
+      // Auto-login or redirect to login
+      if (res.data.token) {
+        login(res.data.token);
+        navigate('/');
+      } else {
+        navigate('/login');
       }
 
-      if (!res.ok) throw new Error(data?.message || 'Signup failed');
-      
-      // Navigate to email verification instead of logging in
-      navigate('/verify-email', { state: { email: form.email } });
-
     } catch (e) {
-      setMsg(e.message);
-      if (e.message.toLowerCase().includes('biometric')) {
+      setMsg(e.response?.data?.message || e.message);
+      if (e.response?.data?.message?.toLowerCase().includes('biometric')) {
          setTimeout(() => navigate('/login'), 2500);
       }
     } finally {

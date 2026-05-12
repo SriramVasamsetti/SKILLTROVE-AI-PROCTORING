@@ -29,9 +29,6 @@ async function signup(req, res) {
     }
   }
 
-  // Generate 6-digit OTP
-  const vToken = Math.floor(100000 + Math.random() * 900000).toString();
-
   let user;
   try {
     user = await User.create({
@@ -41,13 +38,8 @@ async function signup(req, res) {
       faceDescriptor,
       profileImage,
       role: chosenRole,
-      verificationToken: vToken,
-      isVerified: false
+      isVerified: true
     });
-    
-    // Send verification link
-    // Send verification OTP
-    sendVerificationEmail(email, vToken);
     
   } catch (dbErr) {
     if (dbErr.code === 11000) {
@@ -72,12 +64,12 @@ async function signup(req, res) {
     return res.status(500).json({ message: 'Server auth configuration error (JWT_SECRET).' });
   }
 
-  // Set HttpOnly Cookies for enhanced security (XSS prevention)
+  // Set HttpOnly Cookies
   res.cookie('token', authToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000
   });
   res.cookie('role', user.role, {
     httpOnly: true,
@@ -87,6 +79,7 @@ async function signup(req, res) {
   });
 
   return res.status(201).json({
+    token: authToken,
     user: {
       id: user._id,
       name: user.name,
@@ -120,13 +113,6 @@ async function login(req, res) {
     throw err;
   }
 
-  if (!user.isVerified) {
-    return res.status(403).json({ 
-      message: 'Email not verified. Please verify your account to login.',
-      code: 'EMAIL_UNVERIFIED'
-    });
-  }
-
   const token = signAuthToken({
     userId: String(user._id),
     email: user.email,
@@ -148,6 +134,7 @@ async function login(req, res) {
   });
 
   res.json({
+    token,
     user: {
       id: user._id,
       name: user.name,
@@ -159,20 +146,12 @@ async function login(req, res) {
   });
 }
 
-/**
- * @function logout
- * @description Clears security cookies to end session.
- */
 async function logout(req, res) {
   res.clearCookie('token');
   res.clearCookie('role');
   res.json({ message: 'Logged out successfully' });
 }
 
-/**
- * @function verifyEmail
- * @description Verifies the user's email using the 6-digit OTP.
- */
 async function verifyEmail(req, res) {
   const { email, otp } = req.body;
   if (!email || !otp) {
