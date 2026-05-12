@@ -33,7 +33,7 @@ const app = express();
 const server = http.createServer(app);
 
 app.use(helmet());
-aapp.use(
+app.use(
   cors({
     origin: [
       'http://localhost:3000',
